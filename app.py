@@ -345,6 +345,11 @@ def register_routes(app):
     @app.get("/history")
     def history():
         db = get_db()
+        recipes = get_recipes(db, include_archived=True)
+        recipe = None
+        if request.args.get("recipe_id", "").isdigit():
+            recipe = next((r for r in recipes if r["id"] == int(request.args["recipe_id"])), None)
+
         movements = db.execute(
             """SELECT m.*, r.name AS recipe, b.made_on,
                       lf.short_name AS from_name, lt.short_name AS to_name
@@ -353,10 +358,25 @@ def register_routes(app):
                LEFT JOIN batches b ON b.id = m.batch_id
                LEFT JOIN locations lf ON lf.id = m.from_location_id
                LEFT JOIN locations lt ON lt.id = m.to_location_id
+               WHERE %(recipe_id)s::int IS NULL OR m.recipe_id = %(recipe_id)s
                ORDER BY m.created_at DESC, m.id DESC
-               LIMIT 200"""
+               LIMIT 200""",
+            {"recipe_id": recipe["id"] if recipe else None},
         ).fetchall()
-        return render_template("history.html", movements=movements)
+
+        last_made = None
+        if recipe:
+            last_made = db.execute(
+                "SELECT max(made_on) AS made_on FROM batches WHERE recipe_id = %s", (recipe["id"],)
+            ).fetchone()["made_on"]
+        return render_template(
+            "history.html",
+            movements=movements,
+            recipes=recipes,
+            recipe=recipe,
+            last_made=last_made,
+            days_ago=(today_local() - last_made).days if last_made else None,
+        )
 
     @app.post("/history/<int:movement_id>/undo")
     def undo_movement(movement_id):
@@ -381,7 +401,9 @@ def register_routes(app):
             flash(f"Can't undo that: {e} Some of those meals have already been moved or used.", "error")
         else:
             flash("Undone.", "success")
-        return redirect(url_for("history"))
+        # Stay on the same filtered view.
+        recipe_filter = request.form.get("recipe_id", "")
+        return redirect(url_for("history", recipe_id=recipe_filter) if recipe_filter.isdigit() else url_for("history"))
 
 
 def describe_change(kind, quantity, recipes, locations, recipe_id, from_id, to_id):

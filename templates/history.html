@@ -2,6 +2,32 @@
 {% block title %}History · Meal Tracker{% endblock %}
 {% block content %}
 <h1>History</h1>
+
+<form method="get" class="filter">
+  <label for="recipe_id">Recipe</label>
+  <select id="recipe_id" name="recipe_id" onchange="this.form.submit()">
+    <option value="">All recipes</option>
+    {% for r in recipes %}
+    <option value="{{ r.id }}" {{ 'selected' if recipe and recipe.id == r.id }}>{{ r.name }}{{ ' (archived)' if r.archived }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">Filter</button></noscript>
+</form>
+
+{% if recipe %}
+<div class="card last-made">
+  {% if last_made %}
+    <div class="small muted">Last made</div>
+    <div class="last-made-date">{{ last_made.strftime('%a, %b %d, %Y') }}</div>
+    <div class="small muted">
+      {% if days_ago == 0 %}today{% elif days_ago == 1 %}yesterday{% else %}{{ days_ago }} days ago{% endif %}
+    </div>
+  {% else %}
+    <div class="muted">{{ recipe.name }} hasn't been made yet.</div>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if movements %}
 <ul class="list history">
   {% for m in movements %}
@@ -18,16 +44,22 @@
           <strong>Threw out</strong> {{ m.quantity }} {{ m.recipe }} from {{ m.from_name }}
         {% endif %}
       </div>
-      <div class="small muted">{{ m.created_at | localtime }}</div>
+      <div class="small muted">
+        {{ m.created_at | localtime }}
+        {% if m.made_on and m.made_on != m.created_at.astimezone(config.TZ).date() %}
+          · batch made {{ m.made_on.strftime('%b %d') }}
+        {% endif %}
+      </div>
     </div>
     <form method="post" action="{{ url_for('undo_movement', movement_id=m.id) }}"
           onsubmit="return confirm('Undo this?');">
+      {% if recipe %}<input type="hidden" name="recipe_id" value="{{ recipe.id }}">{% endif %}
       <button class="link-button" type="submit">Undo</button>
     </form>
   </li>
   {% endfor %}
 </ul>
-{% else %}
+{% elif not recipe %}
 <p class="card empty">Nothing yet.</p>
 {% endif %}
 {% endblock %}

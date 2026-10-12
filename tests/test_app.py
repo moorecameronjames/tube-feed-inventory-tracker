@@ -151,3 +151,32 @@ def test_archive_hides_from_batch_form(client, app):
     client.post(f"/recipes/{rid}/edit", data={"name": "Old Recipe", "archived": "1"})
     assert b"Old Recipe" not in client.get("/make").data
     assert b"Old Recipe" in client.get("/recipes").data
+
+
+def test_history_filter_by_recipe(client, app):
+    soup = add_recipe(client, "Soup")
+    stew = add_recipe(client, "Stew")
+    make_batch(client, app, soup, Freezer=2)
+    locs = location_ids(app)
+    client.post("/make", data={"recipe_id": stew, "made_on": "2026-09-01", f"qty_{locs['Freezer']}": 1})
+    client.post("/make", data={"recipe_id": stew, "made_on": "2026-09-20", f"qty_{locs['Freezer']}": 1})
+
+    everything = client.get("/history").data.decode()
+    assert "Soup" in everything and "Stew" in everything and "Last made" not in everything
+
+    page = client.get(f"/history?recipe_id={stew}").data.decode()
+    assert "Made</strong> 1 Stew" in page and "Made</strong> 2 Soup" not in page
+    assert "Last made" in page and "Sep 20, 2026" in page
+
+    never = add_recipe(client, "Never Made")
+    assert b"hasn't been made yet" in client.get(f"/history?recipe_id={never}").data
+
+    # Undo keeps the filter.
+    with psycopg.connect(app.config["DATABASE_URL"]) as conn:
+        move_id = conn.execute("SELECT max(id) FROM movements").fetchone()[0]
+    resp = client.post(f"/history/{move_id}/undo", data={"recipe_id": stew})
+    assert resp.headers["Location"] == f"/history?recipe_id={stew}"
+
+    # Junk filter values just show everything.
+    assert client.get("/history?recipe_id=abc").status_code == 200
+    assert client.get("/history?recipe_id=99999").status_code == 200

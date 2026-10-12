@@ -161,3 +161,8 @@ a.secondary { display: block; text-align: center; padding: 12px; margin-top: 8px
 .hint, .small { font-size: 0.85rem; }
 .hint, .muted { color: var(--muted); }
 .prewrap { white-space: pre-wrap; }
+
+.filter { margin-bottom: 16px; }
+.filter label { margin-top: 0; }
+.last-made { text-align: center; }
+.last-made-date { font-size: 1.3rem; font-weight: 700; margin: 2px 0; }
