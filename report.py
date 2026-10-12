@@ -62,9 +62,12 @@ def build_report(db, today):
 ICONS = {"urgent": "🚨", "make": "⚠️", "thaw": "🧊"}
 
 
-def format_text(report):
-    day = report["date"].strftime("%A, %b ") + str(report["date"].day)
-    lines = [f"Thomas's meals for {day}", ""]
+def format_title(report):
+    return f"Thomas's meals for {report['date'].strftime('%A, %b ')}{report['date'].day}"
+
+
+def format_text(report, include_title=True):
+    lines = [format_title(report), ""] if include_title else []
     for cat in report["categories"]:
         detail = f" ({cat['fridge']} fridge, {cat['freezer']} freezer)" if cat["total"] else ""
         lines.append(f"{cat['name']}: {cat['total']}{detail}")

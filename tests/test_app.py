@@ -361,3 +361,63 @@ def test_report_nothing_to_do(client, app):
         make_batch(client, app, rid, category=cat, Thawing=2, Freezer=2)
     assert "✅ Nothing to do today." in report_text(client)
     assert b"Nothing to do today." in client.get("/").data
+
+
+class FakeNtfy:
+    def __init__(self):
+        self.sent = []
+
+    def __call__(self, server, topic, title, message, **kwargs):
+        self.sent.append({"server": server, "topic": topic, "title": title, "message": message, **kwargs})
+
+
+@pytest.fixture
+def ntfy(app):
+    fake = FakeNtfy()
+    app.config.update(NTFY_TOPIC="test-topic", SEND_NOTIFICATION=fake, PUBLIC_URL="https://example.test")
+    return fake
+
+
+def test_send_to_phone_button(client, ntfy):
+    resp = client.post("/report/test", follow_redirects=True)
+    assert b"Sent today&#39;s report to your phone" in resp.data
+    (msg,) = ntfy.sent
+    assert msg["topic"] == "test-topic" and msg["title"].startswith("Thomas's meals for ")
+    assert "MAKE MORE Dinner: none left!" in msg["message"]
+    assert not msg["message"].startswith("Thomas")  # title isn't repeated in the body
+    assert msg["priority"] == 4 and msg["tags"] == ["rotating_light"]
+    assert msg["click"] == "https://example.test"
+
+
+def test_send_without_topic_explains(client, app):
+    app.config["NTFY_TOPIC"] = None
+    resp = client.post("/report/test", follow_redirects=True)
+    assert b"NTFY_TOPIC is missing" in resp.data
+
+
+def test_send_failure_is_reported(client, app, ntfy):
+    def boom(*args, **kwargs):
+        raise OSError("network down")
+    app.config["SEND_NOTIFICATION"] = boom
+    assert b"network down" in client.post("/report/test", follow_redirects=True).data
+    resp = client.post("/report/send")
+    assert resp.status_code == 500
+
+
+def test_scheduled_send_once_per_day_after_report_hour(client, app, ntfy):
+    app.config["REPORT_HOUR"] = 24  # never reached
+    assert b"Too early" in client.post("/report/send").data
+    assert ntfy.sent == []
+
+    app.config["REPORT_HOUR"] = 0
+    assert client.post("/report/send").data == b"Sent.\n"
+    assert client.post("/report/send").data == b"Already sent today.\n"
+    assert len(ntfy.sent) == 1
+
+
+def test_quiet_priority_when_nothing_to_do(client, app, ntfy):
+    rid = add_recipe(client, "Soup")
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+        make_batch(client, app, rid, category=cat, Thawing=2, Freezer=2)
+    client.post("/report/test")
+    assert ntfy.sent[0]["priority"] == 2 and "Nothing to do today" in ntfy.sent[0]["message"]

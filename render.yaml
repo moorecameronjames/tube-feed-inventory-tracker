@@ -14,3 +14,10 @@ services:
       # Neon connection string (postgresql://...?sslmode=require). Set in the Render dashboard.
       - key: DATABASE_URL
         sync: false
+      # ntfy topic the morning report is pushed to. Set in the Render dashboard
+      # (the repo is public, so it doesn't belong here).
+      - key: NTFY_TOPIC
+        sync: false
+      # Local hour (APP_TIMEZONE) the morning report goes out.
+      - key: REPORT_HOUR
+        value: "7"

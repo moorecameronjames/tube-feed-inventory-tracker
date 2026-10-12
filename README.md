@@ -46,3 +46,18 @@ that takes 30 to 60 seconds.
 
 See [schema.sql](schema.sql). Current counts live in `stock` (recipe × location);
 every change is logged in `movements`, and `batches` records each time a recipe is made.
+
+## Morning report
+
+Each morning the app pushes a summary to the [ntfy](https://ntfy.sh) phone app:
+meals left per category, plus MAKE MORE (1 left; urgent at 0) and THAW
+(1 or fewer in the fridge with some in the freezer). The same list shows on
+the Stock page, and `/report.txt` has the plain-text version.
+
+Setup:
+1. Install ntfy on each phone and subscribe to your topic name (treat it like a password).
+2. In Render, set `NTFY_TOPIC` to that topic name. Then use **Send to phone** on the Stock page to test.
+3. In GitHub, add a repository secret `APP_URL` with the Render site URL.
+   `.github/workflows/morning-report.yml` then triggers the send daily around 7 AM Eastern
+   (`REPORT_HOUR`). GitHub pauses scheduled workflows after 60 days without repo
+   activity; re-enable it from the Actions tab if that happens.

@@ -1,0 +1,26 @@
+# Sends the morning report to the ntfy app each day.
+#
+# GitHub cron runs in UTC, so this fires at 11:00 and 12:00 UTC. That's 7 AM
+# and 8 AM Eastern in daylight time, 6 AM and 7 AM in standard time. The app
+# only sends once a day, at or after REPORT_HOUR (7 AM), so exactly one goes out.
+#
+# Needs a repository secret APP_URL = the Render site URL (no trailing slash).
+name: Morning report
+
+on:
+  schedule:
+    - cron: "0 11 * * *"
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the app to send today's report
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          # The free Render service may be asleep; the first request wakes it.
+          curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 120 \
+            -X POST "$APP_URL/report/send"

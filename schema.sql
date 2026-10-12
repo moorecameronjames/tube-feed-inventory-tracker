@@ -103,3 +103,9 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS movements_created_at_idx ON movements (created_at DESC);
 CREATE INDEX IF NOT EXISTS batches_recipe_idx ON batches (recipe_id, made_on DESC);
+
+-- Small key/value store for app bookkeeping (e.g. the date the morning report last went out).
+CREATE TABLE IF NOT EXISTS app_state (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);

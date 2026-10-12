@@ -20,6 +20,9 @@
   {% else %}
   <p class="muted">Nothing to do today.</p>
   {% endif %}
+  <form method="post" action="{{ url_for('send_test_report') }}" class="todo-send">
+    <button class="link-button" type="submit">Send to phone</button>
+  </form>
 </section>
 
 {% if grand_total %}

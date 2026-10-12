@@ -17,7 +17,8 @@ from flask import (
 )
 from psycopg.rows import dict_row
 
-from report import build_report, format_text
+import notify
+from report import build_report, format_text, format_title
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -37,6 +38,13 @@ def create_app(config=None):
         SECRET_KEY=os.environ.get("SECRET_KEY", "meal-tracker-flash-messages"),
         TIMEZONE=os.environ.get("APP_TIMEZONE", "America/New_York"),
         SESSION_COOKIE_SAMESITE="Lax",
+        # Morning report push notifications (ntfy). No topic = sending is off.
+        NTFY_SERVER=os.environ.get("NTFY_SERVER", "https://ntfy.sh"),
+        NTFY_TOPIC=os.environ.get("NTFY_TOPIC"),
+        REPORT_HOUR=int(os.environ.get("REPORT_HOUR", "7")),
+        # Render sets this; tapping the notification opens the app.
+        PUBLIC_URL=os.environ.get("RENDER_EXTERNAL_URL"),
+        SEND_NOTIFICATION=notify.send_ntfy,
     )
     if config:
         app.config.update(config)
@@ -225,6 +233,41 @@ def register_routes(app):
         # Plain-text morning report, for the daily text/notification to send.
         text = format_text(build_report(get_db(), today_local()))
         return text, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+    @app.post("/report/send")
+    def send_scheduled_report():
+        """Called by the scheduler. Sends once per day, at or after REPORT_HOUR local time.
+
+        The scheduler fires at two UTC times so one of them lands on the report hour in
+        both daylight and standard time; the other is skipped.
+        """
+        db = get_db()
+        now = datetime.now(app.config["TZ"])
+        if now.hour < app.config["REPORT_HOUR"]:
+            return f"Too early ({now:%H:%M}); not sent.\n"
+        with db.transaction():
+            db.execute("SELECT pg_advisory_xact_lock(4243)")
+            last = db.execute("SELECT value FROM app_state WHERE key = 'report_last_sent'").fetchone()
+            if last and last["value"] == now.date().isoformat():
+                return "Already sent today.\n"
+            error = push_report(db)
+            if error:
+                return error + "\n", 500
+            db.execute(
+                """INSERT INTO app_state (key, value) VALUES ('report_last_sent', %s)
+                   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+                (now.date().isoformat(),),
+            )
+        return "Sent.\n"
+
+    @app.post("/report/test")
+    def send_test_report():
+        error = push_report(get_db())
+        if error:
+            flash(error, "error")
+        else:
+            flash("Sent today's report to your phone.", "success")
+        return redirect(url_for("inventory"))
 
     @app.route("/make", methods=["GET", "POST"])
     def make_batch():
@@ -523,3 +566,32 @@ def save_recipe(recipe_id):
     except psycopg.errors.UniqueViolation:
         flash(f"There's already a recipe called “{name}”.", "error")
         return None
+
+
+def push_report(db):
+    """Send today's report via ntfy. Returns an error message, or None on success."""
+    config = current_app.config
+    if not config["NTFY_TOPIC"]:
+        return "Notifications aren't set up yet (NTFY_TOPIC is missing)."
+    report = build_report(db, today_local())
+    levels = {a["level"] for a in report["actions"]}
+    if "urgent" in levels:
+        priority, tags = 4, ["rotating_light"]
+    elif levels:
+        priority, tags = 3, ["clipboard"]
+    else:
+        priority, tags = 2, ["white_check_mark"]
+    try:
+        config["SEND_NOTIFICATION"](
+            config["NTFY_SERVER"],
+            config["NTFY_TOPIC"],
+            format_title(report),
+            format_text(report, include_title=False),
+            priority=priority,
+            tags=tags,
+            click=config["PUBLIC_URL"],
+        )
+    except OSError as e:
+        current_app.logger.exception("Sending the report failed")
+        return f"Couldn't send the notification: {e}"
+    return None

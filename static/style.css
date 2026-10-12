@@ -198,3 +198,4 @@ a.stat { color: inherit; text-decoration: none; }
 .todo li.todo-urgent { background: var(--error-bg); color: var(--error-text); border-color: #d64545; font-weight: 600; }
 .todo li.todo-make { background: var(--highlight-soft); border-color: var(--highlight); }
 .todo li.todo-thaw { background: var(--accent-soft); border-color: #5aa9c2; }
+.todo-send { margin-top: 10px; text-align: right; font-size: 0.9rem; }
