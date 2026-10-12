@@ -18,15 +18,31 @@
       <img src="{{ url_for('static', filename='logo-mark.svg') }}" alt="">
       Thomas Tube Tracking
     </a>
+    <button class="menu-button" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-menu">
+      <span></span><span></span><span></span>
+    </button>
+    <nav class="menu" id="site-menu" hidden>
+      {% set ep = request.endpoint %}
+      <a href="{{ url_for('inventory') }}" class="{{ 'active' if ep == 'inventory' }}">Stock</a>
+      <a href="{{ url_for('make_batch') }}" class="{{ 'active' if ep == 'make_batch' }}">Made a batch</a>
+      <a href="{{ url_for('move') }}" class="{{ 'active' if ep == 'move' }}">Move / Use</a>
+      <a href="{{ url_for('recipes') }}" class="{{ 'active' if ep in ('recipes', 'new_recipe', 'edit_recipe', 'recipe_detail') }}">Recipes</a>
+      <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}">History</a>
+    </nav>
   </header>
-  <nav class="tabs">
-    {% set ep = request.endpoint %}
-    <a href="{{ url_for('inventory') }}" class="{{ 'active' if ep == 'inventory' }}">Stock</a>
-    <a href="{{ url_for('make_batch') }}" class="{{ 'active' if ep == 'make_batch' }}">Made</a>
-    <a href="{{ url_for('move') }}" class="{{ 'active' if ep == 'move' }}">Move / Use</a>
-    <a href="{{ url_for('recipes') }}" class="{{ 'active' if ep in ('recipes', 'new_recipe', 'edit_recipe', 'recipe_detail') }}">Recipes</a>
-    <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}">History</a>
-  </nav>
+  <script>
+    (function () {
+      const button = document.querySelector(".menu-button");
+      const menu = document.getElementById("site-menu");
+      function setOpen(open) {
+        menu.hidden = !open;
+        button.setAttribute("aria-expanded", String(open));
+      }
+      button.addEventListener("click", (e) => { e.stopPropagation(); setOpen(menu.hidden); });
+      document.addEventListener("click", (e) => { if (!menu.contains(e.target)) setOpen(false); });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") setOpen(false); });
+    })();
+  </script>
 
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
