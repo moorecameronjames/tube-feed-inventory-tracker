@@ -62,7 +62,7 @@ ICONS = {"urgent": "🚨", "make": "⚠️", "thaw": "🧊"}
 
 
 def format_title(report):
-    return f"Thomas's meals · {report['date'].strftime('%a %b ')}{report['date'].day}"
+    return f"Thomas Meal Report / {report['date'].strftime('%a, %b ')}{report['date'].day}"
 
 
 def format_actions(report):

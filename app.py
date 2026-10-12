@@ -618,18 +618,13 @@ def notification_payload(db):
     config = current_app.config
     report = build_report(db, today_local())
     levels = {a["level"] for a in report["actions"]}
-    if "urgent" in levels:
-        priority, tags = 4, ["rotating_light"]
-    elif levels:
-        priority, tags = 3, ["clipboard"]
-    else:
-        priority, tags = 2, ["white_check_mark"]
+    # No ntfy tags: the app shows them as emoji in front of the title.
+    priority = 4 if "urgent" in levels else 3 if levels else 2
     payload = {
         "topic": config["NTFY_TOPIC"],
         "title": format_title(report),
         "message": format_actions(report),
         "priority": priority,
-        "tags": tags,
     }
     if config["PUBLIC_URL"]:
         payload["click"] = config["PUBLIC_URL"]

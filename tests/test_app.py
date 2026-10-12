@@ -384,8 +384,9 @@ def test_scheduled_report_due_once_per_day_after_report_hour(client, app, ntfy):
     assert due["due"] is True and due["server"] == "https://ntfy.sh"
     assert due["payload"]["topic"] == "test-topic" and due["payload"]["message"].splitlines() == ALL_OUT
     payload = due["payload"]
-    assert payload["title"].startswith("Thomas's meals · ") and payload["click"] == "https://example.test"
-    assert payload["priority"] == 4 and payload["tags"] == ["rotating_light"]
+    assert re.fullmatch(r"Thomas Meal Report / \w{3}, \w{3} \d{1,2}", payload["title"])
+    assert payload["click"] == "https://example.test"
+    assert payload["priority"] == 4 and "tags" not in payload  # tags show as emoji in the title
 
     # Still due until the scheduler confirms it sent it.
     assert client.post("/report/due").json["due"] is True
