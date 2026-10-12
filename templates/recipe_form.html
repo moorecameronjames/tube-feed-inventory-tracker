@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New recipe' if is_new else 'Edit recipe' }} · Meal Tracker{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ 'New recipe' if is_new else 'Edit recipe' }}</h1>
+  <form method="post">
+    <label for="name">Name</label>
+    <input id="name" name="name" value="{{ recipe.get('name', '') }}" required autofocus>
+
+    <label for="ingredients">Ingredients</label>
+    <textarea id="ingredients" name="ingredients" rows="6">{{ recipe.get('ingredients', '') }}</textarea>
+
+    <label for="instructions">Instructions</label>
+    <textarea id="instructions" name="instructions" rows="6">{{ recipe.get('instructions', '') }}</textarea>
+
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="3">{{ recipe.get('notes', '') }}</textarea>
+
+    {% if not is_new %}
+    <label class="checkbox">
+      <input type="checkbox" name="archived" value="1" {{ 'checked' if recipe.get('archived') }}>
+      Archived (hide from the batch list; she doesn't make this anymore)
+    </label>
+    {% endif %}
+
+    <button type="submit">Save</button>
+    {% if not is_new %}
+    <a class="secondary" href="{{ url_for('recipe_detail', recipe_id=recipe.id) }}">Cancel</a>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

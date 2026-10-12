@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}History · Meal Tracker{% endblock %}
+{% block content %}
+<h1>History</h1>
+{% if movements %}
+<ul class="list history">
+  {% for m in movements %}
+  <li>
+    <div>
+      <div>
+        {% if m.kind == 'made' %}
+          <strong>Made</strong> {{ m.quantity }} {{ m.recipe }} → {{ m.to_name }}
+        {% elif m.kind == 'moved' %}
+          <strong>Moved</strong> {{ m.quantity }} {{ m.recipe }}: {{ m.from_name }} → {{ m.to_name }}
+        {% elif m.kind == 'used' %}
+          <strong>Used</strong> {{ m.quantity }} {{ m.recipe }} from {{ m.from_name }}
+        {% else %}
+          <strong>Threw out</strong> {{ m.quantity }} {{ m.recipe }} from {{ m.from_name }}
+        {% endif %}
+      </div>
+      <div class="small muted">{{ m.created_at | localtime }}</div>
+    </div>
+    <form method="post" action="{{ url_for('undo_movement', movement_id=m.id) }}"
+          onsubmit="return confirm('Undo this?');">
+      <button class="link-button" type="submit">Undo</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="card empty">Nothing yet.</p>
+{% endif %}
+{% endblock %}

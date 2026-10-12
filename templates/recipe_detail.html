@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ recipe.name }} · Meal Tracker{% endblock %}
+{% block content %}
+<div class="heading-row">
+  <h1>{{ recipe.name }}{% if recipe.archived %} <span class="badge">archived</span>{% endif %}</h1>
+  <a class="button secondary" href="{{ url_for('edit_recipe', recipe_id=recipe.id) }}">Edit</a>
+</div>
+
+<section class="summary">
+  {% for loc in locations %}
+  <div class="stat">
+    <div class="stat-number">{{ counts.get(loc.id, 0) }}</div>
+    <div class="stat-label">{{ loc.short_name }}</div>
+  </div>
+  {% endfor %}
+  <div class="stat stat-total">
+    <div class="stat-number">{{ total }}</div>
+    <div class="stat-label">Total</div>
+  </div>
+</section>
+
+<p><a class="button" href="{{ url_for('make_batch', recipe_id=recipe.id) }}">Log a batch of this</a></p>
+
+{% if recipe.ingredients %}
+<div class="card"><h2>Ingredients</h2><div class="prewrap">{{ recipe.ingredients }}</div></div>
+{% endif %}
+{% if recipe.instructions %}
+<div class="card"><h2>Instructions</h2><div class="prewrap">{{ recipe.instructions }}</div></div>
+{% endif %}
+{% if recipe.notes %}
+<div class="card"><h2>Notes</h2><div class="prewrap">{{ recipe.notes }}</div></div>
+{% endif %}
+
+<div class="card">
+  <h2>Batches made</h2>
+  {% if batches %}
+  <ul class="list">
+    {% for b in batches %}
+    <li>
+      <span>{{ b.made_on.strftime('%b %d, %Y') }}{% if b.notes %} · <span class="muted">{{ b.notes }}</span>{% endif %}</span>
+      <span class="badge">{{ b.meals }} meals</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">None logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

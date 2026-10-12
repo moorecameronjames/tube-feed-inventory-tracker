@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: tube-feed-inventory-tracker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 "app:create_app()"
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: APP_TIMEZONE
+        value: America/New_York
+      # Neon connection string (postgresql://...?sslmode=require). Set in the Render dashboard.
+      - key: DATABASE_URL
+        sync: false
+      # The shared login password. Set in the Render dashboard.
+      - key: APP_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

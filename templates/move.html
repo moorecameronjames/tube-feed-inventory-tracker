@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Move or use · Meal Tracker{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Move or use meals</h1>
+  {% if not recipes %}
+    <p>Nothing to move yet.</p>
+  {% else %}
+  {% set kind = values.get('kind', 'moved') %}
+  <form method="post" id="move-form">
+    <fieldset class="choices">
+      <legend>What happened?</legend>
+      <label><input type="radio" name="kind" value="moved" {{ 'checked' if kind == 'moved' }}> Moved</label>
+      <label><input type="radio" name="kind" value="used" {{ 'checked' if kind == 'used' }}> Used</label>
+      <label><input type="radio" name="kind" value="discarded" {{ 'checked' if kind == 'discarded' }}> Thrown out</label>
+    </fieldset>
+
+    <label for="recipe_id">Recipe</label>
+    <select id="recipe_id" name="recipe_id" required>
+      <option value="">Choose…</option>
+      {% for r in recipes %}
+      <option value="{{ r.id }}" {{ 'selected' if values.get('recipe_id') == r.id|string }}>{{ r.name }}</option>
+      {% endfor %}
+    </select>
+
+    <label for="from_location_id">From</label>
+    <select id="from_location_id" name="from_location_id" required>
+      {% for loc in locations %}
+      <option value="{{ loc.id }}" {{ 'selected' if values.get('from_location_id') == loc.id|string }}>{{ loc.name }}</option>
+      {% endfor %}
+    </select>
+
+    <div id="to-field">
+      <label for="to_location_id">To</label>
+      <select id="to_location_id" name="to_location_id">
+        {% for loc in locations %}
+        <option value="{{ loc.id }}" {{ 'selected' if values.get('to_location_id') == loc.id|string }}>{{ loc.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <label for="quantity">How many meals?</label>
+    <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1"
+           value="{{ values.get('quantity', 1) }}" required>
+    <p class="small" id="available"></p>
+
+    <button type="submit">Save</button>
+  </form>
+  {% endif %}
+</div>
+
+<script>
+  (function () {
+    const form = document.getElementById("move-form");
+    if (!form) return;
+    const stock = {{ stock_json | tojson }};
+    const recipe = form.elements.recipe_id;
+    const from = form.elements.from_location_id;
+    const to = form.elements.to_location_id;
+    const toField = document.getElementById("to-field");
+    const available = document.getElementById("available");
+
+    function pickDefaultTo() {
+      // Default "To" to the next spot after "From" (freezer → thawing → syringes).
+      if (to.value !== from.value) return;
+      const next = from.selectedIndex + 1;
+      if (next < to.options.length) to.selectedIndex = next;
+    }
+
+    function update() {
+      const kind = form.querySelector('input[name="kind"]:checked').value;
+      toField.hidden = kind !== "moved";
+      const have = (stock[recipe.value] || {})[from.value] || 0;
+      available.textContent = recipe.value ? `${have} available there` : "";
+      pickDefaultTo();
+    }
+
+    form.addEventListener("change", update);
+    update();
+  })();
+</script>
+{% endblock %}

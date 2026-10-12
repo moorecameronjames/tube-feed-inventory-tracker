@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest
+pgserver  # throwaway local Postgres for dev_server.py and tests

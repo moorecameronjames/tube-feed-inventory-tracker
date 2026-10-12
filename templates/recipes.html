@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Recipes · Meal Tracker{% endblock %}
+{% block content %}
+<div class="heading-row">
+  <h1>Recipes</h1>
+  <a class="button" href="{{ url_for('new_recipe') }}">+ New recipe</a>
+</div>
+
+{% if active %}
+<ul class="list">
+  {% for r in active %}
+  <li>
+    <a href="{{ url_for('recipe_detail', recipe_id=r.id) }}">{{ r.name }}</a>
+    <span class="badge">{{ totals[r.id] }} on hand</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="card empty">No recipes yet.</p>
+{% endif %}
+
+{% if archived %}
+<details class="archived">
+  <summary>Archived ({{ archived|length }})</summary>
+  <ul class="list">
+    {% for r in archived %}
+    <li>
+      <a href="{{ url_for('recipe_detail', recipe_id=r.id) }}">{{ r.name }}</a>
+      <span class="badge">{{ totals[r.id] }} on hand</span>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+{% endblock %}
