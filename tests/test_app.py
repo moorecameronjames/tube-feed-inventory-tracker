@@ -6,19 +6,22 @@ import pytest
 
 from app import create_app
 
+
 @pytest.fixture(scope="session")
 def pg_uri(tmp_path_factory):
     server = pgserver.get_server(tmp_path_factory.mktemp("pgdata"), cleanup_mode="stop")
     yield server.get_uri()
 
 
-@pytest.fixture
-def app(pg_uri):
+def reset_db(pg_uri):
     with psycopg.connect(pg_uri, autocommit=True) as conn:
         conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-    return create_app(
-        {"DATABASE_URL": pg_uri, "TESTING": True}
-    )
+
+
+@pytest.fixture
+def app(pg_uri):
+    reset_db(pg_uri)
+    return create_app({"DATABASE_URL": pg_uri, "TESTING": True})
 
 
 @pytest.fixture
@@ -26,17 +29,29 @@ def client(app):
     return app.test_client()
 
 
-def location_ids(app):
+def ids(app, table, column):
     with psycopg.connect(app.config["DATABASE_URL"]) as conn:
-        return {short: id for id, short in conn.execute("SELECT id, short_name FROM locations")}
+        return {name: id for id, name in conn.execute(f"SELECT id, {column} FROM {table}")}
 
 
-def stock(app, recipe_id):
+def location_ids(app):
+    return ids(app, "locations", "short_name")
+
+
+def category_ids(app):
+    return ids(app, "categories", "name")
+
+
+def stock(app, recipe_id, category=None):
+    """{location short name: quantity}, summed across categories unless one is given."""
     with psycopg.connect(app.config["DATABASE_URL"]) as conn:
         rows = conn.execute(
-            """SELECT l.short_name, s.quantity FROM stock s JOIN locations l ON l.id = s.location_id
-               WHERE s.recipe_id = %s""",
-            (recipe_id,),
+            """SELECT l.short_name, sum(s.quantity)::int
+               FROM stock s JOIN locations l ON l.id = s.location_id
+               JOIN categories c ON c.id = s.category_id
+               WHERE s.recipe_id = %s AND (%s::text IS NULL OR c.name = %s)
+               GROUP BY l.short_name""",
+            (recipe_id, category, category),
         )
         return {name: qty for name, qty in rows if qty}
 
@@ -47,11 +62,22 @@ def add_recipe(client, name="Chicken & Rice"):
     return int(re.search(r"/recipes/(\d+)", resp.headers["Location"]).group(1))
 
 
-def make_batch(client, app, recipe_id, **split):
+def make_batch(client, app, recipe_id, category="Lunch", made_on="2026-10-12", **split):
     locs = location_ids(app)
-    data = {"recipe_id": recipe_id, "made_on": "2026-10-12"}
+    data = {"recipe_id": recipe_id, "made_on": made_on}
+    if category:
+        data["category_id"] = category_ids(app)[category]
     data.update({f"qty_{locs[name]}": qty for name, qty in split.items()})
     return client.post("/make", data=data, follow_redirects=True)
+
+
+def move(client, app, recipe_id, kind, quantity, frm, to=None, category="Lunch"):
+    locs = location_ids(app)
+    data = {"kind": kind, "meal": f"{recipe_id}:{category_ids(app)[category]}",
+            "quantity": quantity, "from_location_id": locs[frm]}
+    if to:
+        data["to_location_id"] = locs[to]
+    return client.post("/move", data=data, follow_redirects=True)
 
 
 def test_healthz_is_public(app):
@@ -61,7 +87,7 @@ def test_healthz_is_public(app):
 def test_make_batch_splits_across_locations(client, app):
     rid = add_recipe(client)
     resp = make_batch(client, app, rid, Freezer=3, Thawing=3)
-    assert b"Added 6 meals of Chicken &amp; Rice" in resp.data
+    assert b"Added 6 meals of Chicken &amp; Rice (Lunch)" in resp.data
     assert stock(app, rid) == {"Freezer": 3, "Thawing": 3}
     # Second batch adds on top.
     make_batch(client, app, rid, Freezer=2)
@@ -75,56 +101,92 @@ def test_make_batch_needs_some_meals(client, app):
     assert stock(app, rid) == {}
 
 
+def test_make_batch_needs_a_category(client, app):
+    rid = add_recipe(client)
+    resp = make_batch(client, app, rid, category=None, Freezer=2)
+    assert b"Pick breakfast, lunch, snack, or dinner" in resp.data
+    assert stock(app, rid) == {}
+
+
+def test_same_recipe_in_two_categories(client, app):
+    rid = add_recipe(client, "Soup")
+    make_batch(client, app, rid, category="Lunch", Freezer=3)
+    make_batch(client, app, rid, category="Dinner", Freezer=2)
+    assert stock(app, rid, "Lunch") == {"Freezer": 3}
+    assert stock(app, rid, "Dinner") == {"Freezer": 2}
+
+    # Using a dinner doesn't touch the lunches.
+    move(client, app, rid, "used", 2, "Freezer", category="Dinner")
+    assert stock(app, rid, "Lunch") == {"Freezer": 3}
+    assert stock(app, rid, "Dinner") == {}
+    resp = move(client, app, rid, "used", 1, "Freezer", category="Dinner")
+    assert b"only 0 Soup (Dinner) in Freezer" in resp.data
+
+
 def test_move_use_and_discard(client, app):
     rid = add_recipe(client)
-    locs = location_ids(app)
     make_batch(client, app, rid, Freezer=4)
 
-    client.post("/move", data={"kind": "moved", "recipe_id": rid, "quantity": 2,
-                               "from_location_id": locs["Freezer"], "to_location_id": locs["Thawing"]})
+    move(client, app, rid, "moved", 2, "Freezer", "Thawing")
     assert stock(app, rid) == {"Freezer": 2, "Thawing": 2}
 
-    client.post("/move", data={"kind": "moved", "recipe_id": rid, "quantity": 1,
-                               "from_location_id": locs["Thawing"], "to_location_id": locs["Syringes"]})
-    client.post("/move", data={"kind": "used", "recipe_id": rid, "quantity": 1,
-                               "from_location_id": locs["Syringes"], "to_location_id": locs["Freezer"]})
-    client.post("/move", data={"kind": "discarded", "recipe_id": rid, "quantity": 1,
-                               "from_location_id": locs["Freezer"]})
+    move(client, app, rid, "moved", 1, "Thawing", "Syringes")
+    resp = move(client, app, rid, "used", 1, "Syringes", to="Freezer")  # "to" ignored when used
+    assert b"Used: 1 Chicken &amp; Rice (Lunch) from Fridge (in syringes)" in resp.data
+    move(client, app, rid, "discarded", 1, "Freezer")
     assert stock(app, rid) == {"Freezer": 1, "Thawing": 1}
 
 
 def test_cannot_move_more_than_available(client, app):
     rid = add_recipe(client)
-    locs = location_ids(app)
     make_batch(client, app, rid, Freezer=1)
-    resp = client.post("/move", data={"kind": "used", "recipe_id": rid, "quantity": 2,
-                                      "from_location_id": locs["Freezer"]})
-    assert b"only 1 Chicken &amp; Rice in Freezer" in resp.data
-    resp = client.post("/move", data={"kind": "used", "recipe_id": rid, "quantity": 1,
-                                      "from_location_id": locs["Thawing"]})
+    resp = move(client, app, rid, "used", 2, "Freezer")
+    assert b"only 1 Chicken &amp; Rice (Lunch) in Freezer" in resp.data
+    resp = move(client, app, rid, "used", 1, "Thawing")
     assert b"only 0" in resp.data
     assert stock(app, rid) == {"Freezer": 1}
 
 
-def test_inventory_and_history_pages(client, app):
-    rid = add_recipe(client, "Beef Stew")
-    make_batch(client, app, rid, Freezer=3, Syringes=2)
+def test_bad_meal_choice(client, app):
+    resp = client.post("/move", data={"kind": "used", "meal": "nonsense", "quantity": 1,
+                                      "from_location_id": 1}, follow_redirects=True)
+    assert b"Pick which meal" in resp.data
+
+
+def test_inventory_grouped_by_category(client, app):
+    stew = add_recipe(client, "Beef Stew")
+    oats = add_recipe(client, "Oats")
+    make_batch(client, app, stew, category="Dinner", Freezer=3, Syringes=2)
+    make_batch(client, app, oats, category="Breakfast", Thawing=1)
     page = client.get("/").data.decode()
-    assert "Beef Stew" in page and "Total meals" in page
+
+    cards = re.findall(r'stat-number">(\d+)</div>\s*<div class="stat-label">(\w+)', page)
+    assert {name: int(n) for n, name in cards} == {"Breakfast": 1, "Lunch": 0, "Snack": 0, "Dinner": 5}
+    assert "6 meals in all" in page
+
+    dinner = page[page.index('id="cat-4"'):]
+    assert "Beef Stew" in dinner and "Oats" not in dinner
+    assert "category_id=4" in dinner  # number links go to the right category
+
+
+def test_pages_render(client, app):
+    rid = add_recipe(client, "Beef Stew")
+    make_batch(client, app, rid, category="Snack", Freezer=3)
     history = client.get("/history").data.decode()
-    assert "Made</strong> 3 Beef Stew" in history
-    assert client.get(f"/recipes/{rid}").status_code == 200
+    assert 'Made</strong> 3 Beef Stew <span class="tag">Snack</span>' in history
+    detail = client.get(f"/recipes/{rid}").data.decode()
+    assert '<span class="tag">Snack</span>' in detail
     assert client.get(f"/recipes/{rid}/edit").status_code == 200
-    assert client.get("/move").status_code == 200
+    page = client.get(f"/move?recipe_id={rid}&category_id=3&from_location_id=1").data.decode()
+    assert f'value="{rid}:3" selected' in page
     assert client.get("/make").status_code == 200
+    assert client.get("/recipes").status_code == 200
 
 
 def test_undo(client, app):
     rid = add_recipe(client)
-    locs = location_ids(app)
-    make_batch(client, app, rid, Freezer=2)
-    client.post("/move", data={"kind": "moved", "recipe_id": rid, "quantity": 2,
-                               "from_location_id": locs["Freezer"], "to_location_id": locs["Thawing"]})
+    make_batch(client, app, rid, category="Snack", Freezer=2)
+    move(client, app, rid, "moved", 2, "Freezer", "Thawing", category="Snack")
 
     with psycopg.connect(app.config["DATABASE_URL"]) as conn:
         (made_id,), (move_id,) = conn.execute("SELECT id FROM movements ORDER BY id").fetchall()
@@ -133,7 +195,7 @@ def test_undo(client, app):
     resp = client.post(f"/history/{made_id}/undo", follow_redirects=True)
     assert b"Can&#39;t undo" in resp.data
     client.post(f"/history/{move_id}/undo")
-    assert stock(app, rid) == {"Freezer": 2}
+    assert stock(app, rid, "Snack") == {"Freezer": 2}
     client.post(f"/history/{made_id}/undo")
     assert stock(app, rid) == {}
     with psycopg.connect(app.config["DATABASE_URL"]) as conn:
@@ -157,9 +219,8 @@ def test_history_filter_by_recipe(client, app):
     soup = add_recipe(client, "Soup")
     stew = add_recipe(client, "Stew")
     make_batch(client, app, soup, Freezer=2)
-    locs = location_ids(app)
-    client.post("/make", data={"recipe_id": stew, "made_on": "2026-09-01", f"qty_{locs['Freezer']}": 1})
-    client.post("/make", data={"recipe_id": stew, "made_on": "2026-09-20", f"qty_{locs['Freezer']}": 1})
+    make_batch(client, app, stew, made_on="2026-09-01", Freezer=1)
+    make_batch(client, app, stew, made_on="2026-09-20", Freezer=1)
 
     everything = client.get("/history").data.decode()
     assert "Soup" in everything and "Stew" in everything and "Last made" not in everything
@@ -191,6 +252,53 @@ def test_old_recipe_columns_are_dropped(app, pg_uri):
         cols = {r[0] for r in conn.execute(
             "SELECT column_name FROM information_schema.columns WHERE table_name = 'recipes'")}
     assert "instructions" not in cols and "notes" not in cols and "ingredients" in cols
+
+
+def test_pre_category_database_is_migrated_to_snack(pg_uri):
+    # The shape of the live database before categories existed, with real-looking data.
+    reset_db(pg_uri)
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute("""
+            CREATE TABLE locations (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+                                    short_name TEXT NOT NULL, sort_order INT NOT NULL DEFAULT 0);
+            INSERT INTO locations (name, short_name, sort_order) VALUES
+                ('Freezer', 'Freezer', 1), ('Fridge (thawing)', 'Thawing', 2),
+                ('Fridge (in syringes)', 'Syringes', 3);
+            CREATE TABLE recipes (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+                                  ingredients TEXT NOT NULL DEFAULT '', archived BOOLEAN NOT NULL DEFAULT FALSE,
+                                  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE batches (id SERIAL PRIMARY KEY, recipe_id INT NOT NULL REFERENCES recipes(id),
+                                  made_on DATE NOT NULL, notes TEXT NOT NULL DEFAULT '',
+                                  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+            CREATE TABLE stock (recipe_id INT NOT NULL REFERENCES recipes(id),
+                                location_id INT NOT NULL REFERENCES locations(id),
+                                quantity INT NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+                                PRIMARY KEY (recipe_id, location_id));
+            CREATE TABLE movements (id SERIAL PRIMARY KEY, recipe_id INT NOT NULL REFERENCES recipes(id),
+                                    batch_id INT REFERENCES batches(id), kind TEXT NOT NULL,
+                                    from_location_id INT REFERENCES locations(id),
+                                    to_location_id INT REFERENCES locations(id),
+                                    quantity INT NOT NULL CHECK (quantity > 0),
+                                    created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+            INSERT INTO recipes (name) VALUES ('Green Smoothie');
+            INSERT INTO batches (recipe_id, made_on) VALUES (1, '2026-10-12');
+            INSERT INTO stock VALUES (1, 1, 10), (1, 3, 1);
+            INSERT INTO movements (recipe_id, batch_id, kind, to_location_id, quantity) VALUES (1, 1, 'made', 1, 10);
+        """)
+
+    app = create_app({"DATABASE_URL": pg_uri})
+    create_app({"DATABASE_URL": pg_uri})  # running again is a no-op
+    assert stock(app, 1, "Snack") == {"Freezer": 10, "Syringes": 1}
+    with psycopg.connect(pg_uri) as conn:
+        assert conn.execute("SELECT count(*) FROM batches WHERE category_id IS NULL").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM movements WHERE category_id IS NULL").fetchone()[0] == 0
+
+    # And the app works on the migrated data, including new categories alongside.
+    client = app.test_client()
+    make_batch(client, app, 1, category="Breakfast", Freezer=2)
+    assert stock(app, 1, "Breakfast") == {"Freezer": 2}
+    move(client, app, 1, "used", 1, "Syringes", category="Snack")
+    assert stock(app, 1, "Snack") == {"Freezer": 10}
 
 
 def test_edit_recipe_ingredients(client):

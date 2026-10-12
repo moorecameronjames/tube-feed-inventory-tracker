@@ -35,13 +35,13 @@
     <div>
       <div>
         {% if m.kind == 'made' %}
-          <strong>Made</strong> {{ m.quantity }} {{ m.recipe }} → {{ m.to_name }}
+          <strong>Made</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> → {{ m.to_name }}
         {% elif m.kind == 'moved' %}
-          <strong>Moved</strong> {{ m.quantity }} {{ m.recipe }}: {{ m.from_name }} → {{ m.to_name }}
+          <strong>Moved</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span>: {{ m.from_name }} → {{ m.to_name }}
         {% elif m.kind == 'used' %}
-          <strong>Used</strong> {{ m.quantity }} {{ m.recipe }} from {{ m.from_name }}
+          <strong>Used</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> from {{ m.from_name }}
         {% else %}
-          <strong>Threw out</strong> {{ m.quantity }} {{ m.recipe }} from {{ m.from_name }}
+          <strong>Threw out</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> from {{ m.from_name }}
         {% endif %}
       </div>
       <div class="small muted">

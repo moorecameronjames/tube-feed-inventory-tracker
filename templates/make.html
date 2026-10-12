@@ -17,6 +17,14 @@
     </select>
     <p class="small"><a href="{{ url_for('new_recipe') }}">+ New recipe</a></p>
 
+    <fieldset class="choices grid-2">
+      <legend>This batch is for</legend>
+      {% for c in categories %}
+      <label><input type="radio" name="category_id" value="{{ c.id }}" required
+             {{ 'checked' if form.get('category_id') == c.id|string }}> {{ c.name }}</label>
+      {% endfor %}
+    </fieldset>
+
     <label for="made_on">Made on</label>
     <input id="made_on" name="made_on" type="date" value="{{ form.get('made_on', today) }}" required>
 

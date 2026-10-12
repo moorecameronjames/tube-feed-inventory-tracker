@@ -3,8 +3,8 @@
 {% block content %}
 <div class="card">
   <h1>Move or use meals</h1>
-  {% if not recipes %}
-    <p>Nothing to move yet.</p>
+  {% if not groups %}
+    <p>Nothing on hand to move yet.</p>
   {% else %}
   {% set kind = values.get('kind', 'moved') %}
   <form method="post" id="move-form">
@@ -15,11 +15,15 @@
       <label><input type="radio" name="kind" value="discarded" {{ 'checked' if kind == 'discarded' }}> Thrown out</label>
     </fieldset>
 
-    <label for="recipe_id">Recipe</label>
-    <select id="recipe_id" name="recipe_id" required>
+    <label for="meal">Meal</label>
+    <select id="meal" name="meal" required>
       <option value="">Choose…</option>
-      {% for r in recipes %}
-      <option value="{{ r.id }}" {{ 'selected' if values.get('recipe_id') == r.id|string }}>{{ r.name }}</option>
+      {% for g in groups %}
+      <optgroup label="{{ g.category }}">
+        {% for i in g['items'] %}
+        <option value="{{ i.key }}" {{ 'selected' if selected == i.key }}>{{ i.label }} ({{ g.category }})</option>
+        {% endfor %}
+      </optgroup>
       {% endfor %}
     </select>
 
@@ -54,7 +58,7 @@
     const form = document.getElementById("move-form");
     if (!form) return;
     const stock = {{ stock_json | tojson }};
-    const recipe = form.elements.recipe_id;
+    const recipe = form.elements.meal;
     const from = form.elements.from_location_id;
     const to = form.elements.to_location_id;
     const toField = document.getElementById("to-field");

@@ -1,51 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="summary">
-  {% for loc in locations %}
-  <div class="stat">
-    <div class="stat-number">{{ totals[loc.id] }}</div>
-    <div class="stat-label">{{ loc.short_name }}</div>
-  </div>
+  {% for s in sections %}
+  <a class="stat {{ 'stat-empty' if not s.total }}" href="#cat-{{ s.category.id }}">
+    <div class="stat-number">{{ s.total }}</div>
+    <div class="stat-label">{{ s.category.name }}</div>
+  </a>
   {% endfor %}
-  <div class="stat stat-total">
-    <div class="stat-number">{{ grand_total }}</div>
-    <div class="stat-label">Total meals</div>
-  </div>
 </section>
 
-{% if rows %}
-<p class="hint">Tap a number to move or use those meals.</p>
-<div class="table-wrap">
-<table class="stock">
-  <thead>
-    <tr>
-      <th class="left">Recipe</th>
-      {% for loc in locations %}<th>{{ loc.short_name }}</th>{% endfor %}
-      <th>Total</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for row in rows %}
-    <tr>
-      <td class="left"><a href="{{ url_for('recipe_detail', recipe_id=row.recipe.id) }}">{{ row.recipe.name }}</a></td>
-      {% for loc in locations %}
-        {% set qty = row.counts.get(loc.id, 0) %}
-        <td>
-          {% if qty %}
-            <a class="qty" href="{{ url_for('move', recipe_id=row.recipe.id, from_location_id=loc.id) }}">{{ qty }}</a>
-          {% else %}<span class="zero">0</span>{% endif %}
-        </td>
+{% if grand_total %}
+<p class="hint">{{ grand_total }} meals in all. Tap a number to move or use those meals.</p>
+
+{% for s in sections %}
+<section class="category" id="cat-{{ s.category.id }}">
+  <div class="category-head">
+    <h2>{{ s.category.name }}</h2>
+    <span class="badge">{{ s.total }} meal{{ '' if s.total == 1 else 's' }}</span>
+  </div>
+  {% if s.rows %}
+  <div class="table-wrap">
+  <table class="stock">
+    <thead>
+      <tr>
+        <th class="left">Recipe</th>
+        {% for loc in locations %}<th>{{ loc.short_name }}</th>{% endfor %}
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in s.rows %}
+      <tr>
+        <td class="left"><a href="{{ url_for('recipe_detail', recipe_id=row.recipe.id) }}">{{ row.recipe.name }}</a></td>
+        {% for loc in locations %}
+          {% set qty = row.counts.get(loc.id, 0) %}
+          <td>
+            {% if qty %}
+              <a class="qty" href="{{ url_for('move', recipe_id=row.recipe.id, category_id=s.category.id, from_location_id=loc.id) }}">{{ qty }}</a>
+            {% else %}<span class="zero">0</span>{% endif %}
+          </td>
+        {% endfor %}
+        <td class="total">{{ row.total }}</td>
+      </tr>
       {% endfor %}
-      <td class="total">{{ row.total }}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted small none">None on hand.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
 {% else %}
 <div class="card empty">
   <p>No meals tracked yet.</p>
-  <p><a class="button" href="{{ url_for('new_recipe') }}">Add a recipe</a> then log a batch under <strong>Made</strong>.</p>
+  <p><a class="button" href="{{ url_for('make_batch') }}">Log a batch</a></p>
 </div>
 {% endif %}
 {% endblock %}

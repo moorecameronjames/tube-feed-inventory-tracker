@@ -80,6 +80,10 @@ def get_locations(db):
     return db.execute("SELECT * FROM locations ORDER BY sort_order").fetchall()
 
 
+def get_categories(db):
+    return db.execute("SELECT * FROM categories ORDER BY sort_order").fetchall()
+
+
 def get_recipes(db, include_archived=False):
     sql = "SELECT * FROM recipes"
     if not include_archived:
@@ -88,47 +92,62 @@ def get_recipes(db, include_archived=False):
 
 
 def get_stock_map(db):
-    """{recipe_id: {location_id: quantity}}"""
+    """{(recipe_id, category_id): {location_id: quantity}}, only for meals on hand."""
     stock = {}
-    for row in db.execute("SELECT recipe_id, location_id, quantity FROM stock"):
-        stock.setdefault(row["recipe_id"], {})[row["location_id"]] = row["quantity"]
+    for row in db.execute(
+        "SELECT recipe_id, category_id, location_id, quantity FROM stock WHERE quantity > 0"
+    ):
+        stock.setdefault((row["recipe_id"], row["category_id"]), {})[row["location_id"]] = row["quantity"]
     return stock
 
 
-def adjust_stock(db, recipe_id, location_id, delta):
+def recipe_totals(stock):
+    """{recipe_id: total meals across all categories and locations}"""
+    totals = {}
+    for (recipe_id, _), counts in stock.items():
+        totals[recipe_id] = totals.get(recipe_id, 0) + sum(counts.values())
+    return totals
+
+
+def adjust_stock(db, recipe_id, category_id, location_id, delta):
+    key = (recipe_id, category_id, location_id)
     if delta < 0:
         row = db.execute(
-            "SELECT quantity FROM stock WHERE recipe_id = %s AND location_id = %s FOR UPDATE",
-            (recipe_id, location_id),
+            """SELECT quantity FROM stock
+               WHERE recipe_id = %s AND category_id = %s AND location_id = %s FOR UPDATE""",
+            key,
         ).fetchone()
         have = row["quantity"] if row else 0
         if have < -delta:
             names = db.execute(
-                """SELECT r.name AS recipe, l.name AS location
-                   FROM recipes r, locations l WHERE r.id = %s AND l.id = %s""",
-                (recipe_id, location_id),
-            ).fetchone() or {"recipe": "that recipe", "location": "that spot"}
+                """SELECT r.name AS recipe, c.name AS category, l.name AS location
+                   FROM recipes r, categories c, locations l
+                   WHERE r.id = %s AND c.id = %s AND l.id = %s""",
+                key,
+            ).fetchone() or {"recipe": "that recipe", "category": "that category", "location": "that spot"}
             raise StockError(
-                f"There {'is' if have == 1 else 'are'} only {have} {names['recipe']} in {names['location']}."
+                f"There {'is' if have == 1 else 'are'} only {have} {names['recipe']} "
+                f"({names['category']}) in {names['location']}."
             )
         db.execute(
-            "UPDATE stock SET quantity = quantity + %s WHERE recipe_id = %s AND location_id = %s",
-            (delta, recipe_id, location_id),
+            """UPDATE stock SET quantity = quantity + %s
+               WHERE recipe_id = %s AND category_id = %s AND location_id = %s""",
+            (delta, *key),
         )
         return
     db.execute(
-        """INSERT INTO stock (recipe_id, location_id, quantity) VALUES (%s, %s, %s)
-           ON CONFLICT (recipe_id, location_id)
+        """INSERT INTO stock (recipe_id, category_id, location_id, quantity) VALUES (%s, %s, %s, %s)
+           ON CONFLICT (recipe_id, category_id, location_id)
            DO UPDATE SET quantity = stock.quantity + EXCLUDED.quantity""",
-        (recipe_id, location_id, delta),
+        (*key, delta),
     )
 
 
-def apply_movement(db, recipe_id, from_location_id, to_location_id, quantity):
+def apply_movement(db, recipe_id, category_id, from_location_id, to_location_id, quantity):
     if from_location_id:
-        adjust_stock(db, recipe_id, from_location_id, -quantity)
+        adjust_stock(db, recipe_id, category_id, from_location_id, -quantity)
     if to_location_id:
-        adjust_stock(db, recipe_id, to_location_id, quantity)
+        adjust_stock(db, recipe_id, category_id, to_location_id, quantity)
 
 
 # --- helpers --------------------------------------------------------------
@@ -177,34 +196,41 @@ def register_routes(app):
         db = get_db()
         locations = get_locations(db)
         stock = get_stock_map(db)
-        rows = []
-        totals = {loc["id"]: 0 for loc in locations}
-        for recipe in get_recipes(db, include_archived=True):
-            counts = stock.get(recipe["id"], {})
-            total = sum(counts.values())
-            if recipe["archived"] and total == 0:
-                continue
-            for loc_id, qty in counts.items():
-                totals[loc_id] += qty
-            rows.append({"recipe": recipe, "counts": counts, "total": total})
+        recipes = get_recipes(db, include_archived=True)  # already sorted by name
+        sections = []
+        for category in get_categories(db):
+            rows = [
+                {"recipe": r, "counts": stock[(r["id"], category["id"])],
+                 "total": sum(stock[(r["id"], category["id"])].values())}
+                for r in recipes
+                if (r["id"], category["id"]) in stock
+            ]
+            sections.append({
+                "category": category,
+                "rows": rows,
+                "total": sum(row["total"] for row in rows),
+            })
         return render_template(
             "inventory.html",
             locations=locations,
-            rows=rows,
-            totals=totals,
-            grand_total=sum(totals.values()),
+            sections=sections,
+            grand_total=sum(s["total"] for s in sections),
         )
 
     @app.route("/make", methods=["GET", "POST"])
     def make_batch():
         db = get_db()
         locations = get_locations(db)
+        categories = get_categories(db)
         recipes = get_recipes(db)
         form = request.form
 
         if request.method == "POST":
             try:
                 recipe_id = parse_int(form.get("recipe_id"), "Recipe", minimum=1)
+                category_id = parse_int(form.get("category_id"), "Category")
+                if category_id not in {c["id"] for c in categories}:
+                    raise ValueError("Pick breakfast, lunch, snack, or dinner.")
                 made_on = parse_date(form.get("made_on"))
                 split = {
                     loc["id"]: parse_int(form.get(f"qty_{loc['id']}"), loc["name"])
@@ -217,24 +243,28 @@ def register_routes(app):
             else:
                 with db.transaction():
                     batch_id = db.execute(
-                        "INSERT INTO batches (recipe_id, made_on, notes) VALUES (%s, %s, %s) RETURNING id",
-                        (recipe_id, made_on, form.get("notes", "").strip()),
+                        """INSERT INTO batches (recipe_id, category_id, made_on, notes)
+                           VALUES (%s, %s, %s, %s) RETURNING id""",
+                        (recipe_id, category_id, made_on, form.get("notes", "").strip()),
                     ).fetchone()["id"]
                     for loc_id, qty in split.items():
                         if qty:
-                            apply_movement(db, recipe_id, None, loc_id, qty)
+                            apply_movement(db, recipe_id, category_id, None, loc_id, qty)
                             db.execute(
-                                """INSERT INTO movements (recipe_id, batch_id, kind, to_location_id, quantity)
-                                   VALUES (%s, %s, 'made', %s, %s)""",
-                                (recipe_id, batch_id, loc_id, qty),
+                                """INSERT INTO movements
+                                       (recipe_id, category_id, batch_id, kind, to_location_id, quantity)
+                                   VALUES (%s, %s, %s, 'made', %s, %s)""",
+                                (recipe_id, category_id, batch_id, loc_id, qty),
                             )
                 name = next((r["name"] for r in recipes if r["id"] == recipe_id), "batch")
-                flash(f"Added {sum(split.values())} meals of {name}.", "success")
+                category = next(c["name"] for c in categories if c["id"] == category_id)
+                flash(f"Added {sum(split.values())} meals of {name} ({category}).", "success")
                 return redirect(url_for("inventory"))
 
         return render_template(
             "make.html",
             recipes=recipes,
+            categories=categories,
             locations=locations,
             form=form,
             selected_recipe=form.get("recipe_id") or request.args.get("recipe_id", ""),
@@ -246,6 +276,7 @@ def register_routes(app):
         db = get_db()
         locations = get_locations(db)
         location_ids = {loc["id"] for loc in locations}
+        categories = get_categories(db)
         recipes = get_recipes(db, include_archived=True)
         stock = get_stock_map(db)
         values = request.form if request.method == "POST" else request.args
@@ -255,7 +286,7 @@ def register_routes(app):
                 kind = values.get("kind")
                 if kind not in KIND_LABELS:
                     raise ValueError("Pick what happened.")
-                recipe_id = parse_int(values.get("recipe_id"), "Recipe", minimum=1)
+                recipe_id, category_id = parse_item(values.get("meal"))
                 quantity = parse_int(values.get("quantity"), "Number of meals", minimum=1)
                 from_id = parse_int(values.get("from_location_id"), "From", minimum=1)
                 to_id = None
@@ -266,22 +297,36 @@ def register_routes(app):
                 if from_id not in location_ids or (to_id and to_id not in location_ids):
                     raise ValueError("Unknown location.")
                 with db.transaction():
-                    apply_movement(db, recipe_id, from_id, to_id, quantity)
+                    apply_movement(db, recipe_id, category_id, from_id, to_id, quantity)
                     db.execute(
-                        """INSERT INTO movements (recipe_id, kind, from_location_id, to_location_id, quantity)
-                           VALUES (%s, %s, %s, %s, %s)""",
-                        (recipe_id, kind, from_id, to_id, quantity),
+                        """INSERT INTO movements
+                               (recipe_id, category_id, kind, from_location_id, to_location_id, quantity)
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+                        (recipe_id, category_id, kind, from_id, to_id, quantity),
                     )
             except (ValueError, StockError) as e:
                 flash(str(e), "error")
             else:
-                flash(describe_change(kind, quantity, recipes, locations, recipe_id, from_id, to_id), "success")
+                flash(describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id), "success")
                 return redirect(url_for("inventory"))
 
-        stock_json = {str(r): {str(l): q for l, q in locs.items()} for r, locs in stock.items()}
+        # One choice per recipe + category on hand, grouped by category.
+        recipe_names = {r["id"]: r["name"] for r in recipes}
+        groups = []
+        for c in categories:
+            items = [
+                {"key": f"{r_id}:{c_id}", "label": recipe_names[r_id]}
+                for (r_id, c_id) in stock
+                if c_id == c["id"]
+            ]
+            if items:
+                groups.append({"category": c["name"], "items": sorted(items, key=lambda i: i["label"].lower())})
+        selected = values.get("meal") or f"{values.get('recipe_id')}:{values.get('category_id')}"
+        stock_json = {f"{r}:{c}": {str(l): q for l, q in locs.items()} for (r, c), locs in stock.items()}
         return render_template(
             "move.html",
-            recipes=[r for r in recipes if not r["archived"] or sum(stock.get(r["id"], {}).values())],
+            groups=groups,
+            selected=selected,
             locations=locations,
             values=values,
             stock_json=stock_json,
@@ -290,14 +335,13 @@ def register_routes(app):
     @app.get("/recipes")
     def recipes():
         db = get_db()
-        stock = get_stock_map(db)
+        totals = recipe_totals(get_stock_map(db))
         all_recipes = get_recipes(db, include_archived=True)
-        totals = {r["id"]: sum(stock.get(r["id"], {}).values()) for r in all_recipes}
         return render_template(
             "recipes.html",
             active=[r for r in all_recipes if not r["archived"]],
             archived=[r for r in all_recipes if r["archived"]],
-            totals=totals,
+            totals={r["id"]: totals.get(r["id"], 0) for r in all_recipes},
         )
 
     @app.route("/recipes/new", methods=["GET", "POST"])
@@ -324,15 +368,21 @@ def register_routes(app):
         db = get_db()
         recipe = load_recipe(recipe_id)
         batches = db.execute(
-            """SELECT b.*, COALESCE(SUM(m.quantity), 0) AS meals
+            """SELECT b.*, c.name AS category, COALESCE(SUM(m.quantity), 0) AS meals
                FROM batches b
+               JOIN categories c ON c.id = b.category_id
                LEFT JOIN movements m ON m.batch_id = b.id AND m.kind = 'made'
                WHERE b.recipe_id = %s
-               GROUP BY b.id
+               GROUP BY b.id, c.name
                ORDER BY b.made_on DESC, b.id DESC""",
             (recipe_id,),
         ).fetchall()
-        counts = get_stock_map(db).get(recipe_id, {})
+        # Meals of this recipe on hand, summed across categories.
+        counts = {}
+        for (r_id, _), locs in get_stock_map(db).items():
+            if r_id == recipe_id:
+                for loc_id, qty in locs.items():
+                    counts[loc_id] = counts.get(loc_id, 0) + qty
         return render_template(
             "recipe_detail.html",
             recipe=recipe,
@@ -351,10 +401,11 @@ def register_routes(app):
             recipe = next((r for r in recipes if r["id"] == int(request.args["recipe_id"])), None)
 
         movements = db.execute(
-            """SELECT m.*, r.name AS recipe, b.made_on,
+            """SELECT m.*, r.name AS recipe, c.name AS category, b.made_on,
                       lf.short_name AS from_name, lt.short_name AS to_name
                FROM movements m
                JOIN recipes r ON r.id = m.recipe_id
+               JOIN categories c ON c.id = m.category_id
                LEFT JOIN batches b ON b.id = m.batch_id
                LEFT JOIN locations lf ON lf.id = m.from_location_id
                LEFT JOIN locations lt ON lt.id = m.to_location_id
@@ -389,7 +440,9 @@ def register_routes(app):
                 if m is None:
                     abort(404)
                 # Reverse the change: put meals back where they came from.
-                apply_movement(db, m["recipe_id"], m["to_location_id"], m["from_location_id"], m["quantity"])
+                apply_movement(
+                    db, m["recipe_id"], m["category_id"], m["to_location_id"], m["from_location_id"], m["quantity"]
+                )
                 db.execute("DELETE FROM movements WHERE id = %s", (movement_id,))
                 if m["batch_id"]:
                     db.execute(
@@ -406,13 +459,29 @@ def register_routes(app):
         return redirect(url_for("history", recipe_id=recipe_filter) if recipe_filter.isdigit() else url_for("history"))
 
 
-def describe_change(kind, quantity, recipes, locations, recipe_id, from_id, to_id):
-    recipe = next(r["name"] for r in recipes if r["id"] == recipe_id)
-    names = {loc["id"]: loc["name"] for loc in locations}
-    meals = f"{quantity} {recipe}"
+def parse_item(value):
+    """'recipe_id:category_id' from the Move form's meal picker."""
+    try:
+        recipe_id, category_id = (int(part) for part in (value or "").split(":"))
+    except ValueError:
+        raise ValueError("Pick which meal.")
+    return recipe_id, category_id
+
+
+def describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id):
+    n = db.execute(
+        """SELECT r.name AS recipe, c.name AS category, lf.name AS from_name, lt.name AS to_name
+           FROM recipes r
+           JOIN categories c ON c.id = %s
+           JOIN locations lf ON lf.id = %s
+           LEFT JOIN locations lt ON lt.id = %s
+           WHERE r.id = %s""",
+        (category_id, from_id, to_id, recipe_id),
+    ).fetchone()
+    meals = f"{quantity} {n['recipe']} ({n['category']})"
     if kind == "moved":
-        return f"Moved {meals} from {names[from_id]} to {names[to_id]}."
-    return f"{KIND_LABELS[kind]}: {meals} from {names[from_id]}."
+        return f"Moved {meals} from {n['from_name']} to {n['to_name']}."
+    return f"{KIND_LABELS[kind]}: {meals} from {n['from_name']}."
 
 
 def load_recipe(recipe_id):
