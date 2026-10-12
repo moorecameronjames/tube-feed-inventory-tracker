@@ -1,0 +1,38 @@
+# Sends today's report to the ntfy app right now, on demand, with "(test)" in
+# the title. Run it from Actions → Test report → Run workflow.
+#
+# Unlike "Morning report" it ignores the once-a-day rule and doesn't record a
+# send, so the real 7 AM report still goes out as usual.
+#
+# Uses the same APP_URL repository secret. The repo is public, so this never
+# prints the message or topic to the log.
+name: Test report
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send a test report
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          set -euo pipefail
+
+          # The free Render service may be asleep; the first request wakes it.
+          due=$(curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 120 \
+            -X POST "$APP_URL/report/due?test=1")
+          is_due=$(jq -r .due <<<"$due")
+          if [ "$is_due" != "true" ]; then
+            reason=$(jq -r .reason <<<"$due")
+            echo "Not sending: $reason"
+            exit 1
+          fi
+          server=$(jq -re .server <<<"$due")
+          payload=$(jq -ce .payload <<<"$due")
+
+          printf '%s' "$payload" | curl -fsS -o /dev/null --retry 5 --retry-delay 20 --max-time 30 \
+            -H "Content-Type: application/json" --data-binary @- "$server"
+          echo "Sent a test report."

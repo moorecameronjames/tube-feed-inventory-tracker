@@ -440,3 +440,21 @@ def test_fed_button_on_stock_page_and_menu(client):
     page = client.get("/").data.decode()
     assert 'class="button fed-button" href="/fed"' in page
     assert '<a href="/fed"' in page  # menu entry
+
+
+def test_test_report_always_due_and_does_not_block_the_real_one(client, app, ntfy):
+    app.config["REPORT_HOUR"] = 24  # the real report isn't due yet
+    for _ in range(2):  # any number of times
+        due = client.post("/report/due?test=1").json
+        assert due["due"] is True and due["payload"]["title"].endswith(" (test)")
+        assert due["payload"]["message"].splitlines() == ALL_OUT
+
+    # Once the real report is sent for the day, tests still work...
+    app.config["REPORT_HOUR"] = 0
+    client.post("/report/sent")
+    assert client.post("/report/due").json["due"] is False
+    assert client.post("/report/due?test=1").json["due"] is True
+    # ...and the real report's title has no "(test)".
+    with psycopg.connect(app.config["DATABASE_URL"], autocommit=True) as conn:
+        conn.execute("DELETE FROM app_state")
+    assert not client.post("/report/due").json["payload"]["title"].endswith("(test)")

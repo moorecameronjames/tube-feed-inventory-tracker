@@ -65,5 +65,6 @@ Setup:
 ntfy.sh's free tier allows 250 messages a day **per sender IP**, even with an account,
 and Render's free tier shares its outbound IPs with many other apps. So the morning
 report is published from the GitHub Actions runner (which asks the app what to send via
-`POST /report/due`, then confirms with `POST /report/sent`), not from Render. To test it,
-use **Actions → Morning report → Run workflow** (it only sends once per day).
+`POST /report/due`, then confirms with `POST /report/sent`), not from Render. To test it any
+time, use **Actions → Test report → Run workflow**: it sends right away with "(test)" in the
+title and doesn't affect the real morning report (which only sends once per day).

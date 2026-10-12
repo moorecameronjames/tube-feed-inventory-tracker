@@ -241,11 +241,18 @@ def register_routes(app):
         Render's shared outbound IPs can exhaust. The scheduler fires at two UTC times
         so one of them lands on REPORT_HOUR in both daylight and standard time; the
         report is due once per day, at or after that hour, until /report/sent is called.
+
+        ?test=1 (the "Test report" workflow) is always due and marked as a test; it
+        doesn't call /report/sent, so the real morning report is unaffected.
         """
         db = get_db()
         now = datetime.now(app.config["TZ"])
         if not app.config["NTFY_TOPIC"]:
             return {"due": False, "reason": "NTFY_TOPIC is not set."}
+        if request.args.get("test") == "1":
+            payload = notification_payload(db)
+            payload["title"] += " (test)"
+            return {"due": True, "server": app.config["NTFY_SERVER"], "payload": payload}
         if now.hour < app.config["REPORT_HOUR"]:
             return {"due": False, "reason": f"Too early ({now:%H:%M})."}
         if get_state(db, "report_last_sent") == now.date().isoformat():
