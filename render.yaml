@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 "app:create_app()"
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 90 "app:create_app()"
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
@@ -21,3 +21,7 @@ services:
       # Local hour (APP_TIMEZONE) the morning report goes out.
       - key: REPORT_HOUR
         value: "7"
+      # Optional ntfy access token (ntfy.sh account → Access tokens). Sending as a
+      # logged-in user avoids the per-IP rate limit shared with other Render apps.
+      - key: NTFY_TOKEN
+        sync: false

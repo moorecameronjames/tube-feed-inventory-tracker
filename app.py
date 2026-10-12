@@ -41,6 +41,9 @@ def create_app(config=None):
         # Morning report push notifications (ntfy). No topic = sending is off.
         NTFY_SERVER=os.environ.get("NTFY_SERVER", "https://ntfy.sh"),
         NTFY_TOPIC=os.environ.get("NTFY_TOPIC"),
+        # Optional ntfy access token: sending as a logged-in user gets its own rate
+        # limit instead of sharing one with every app on Render's outbound IPs.
+        NTFY_TOKEN=os.environ.get("NTFY_TOKEN"),
         REPORT_HOUR=int(os.environ.get("REPORT_HOUR", "7")),
         # Render sets this; tapping the notification opens the app.
         PUBLIC_URL=os.environ.get("RENDER_EXTERNAL_URL"),
@@ -590,6 +593,7 @@ def push_report(db):
             priority=priority,
             tags=tags,
             click=config["PUBLIC_URL"],
+            token=config["NTFY_TOKEN"],
         )
     except OSError as e:
         current_app.logger.exception("Sending the report failed")
