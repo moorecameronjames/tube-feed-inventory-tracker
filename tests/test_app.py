@@ -6,9 +6,6 @@ import pytest
 
 from app import create_app
 
-PASSWORD = "test-password"
-
-
 @pytest.fixture(scope="session")
 def pg_uri(tmp_path_factory):
     server = pgserver.get_server(tmp_path_factory.mktemp("pgdata"), cleanup_mode="stop")
@@ -20,15 +17,13 @@ def app(pg_uri):
     with psycopg.connect(pg_uri, autocommit=True) as conn:
         conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
     return create_app(
-        {"DATABASE_URL": pg_uri, "APP_PASSWORD": PASSWORD, "SECRET_KEY": "test", "TESTING": True}
+        {"DATABASE_URL": pg_uri, "TESTING": True}
     )
 
 
 @pytest.fixture
 def client(app):
-    client = app.test_client()
-    client.post("/login", data={"password": PASSWORD})
-    return client
+    return app.test_client()
 
 
 def location_ids(app):
@@ -57,17 +52,6 @@ def make_batch(client, app, recipe_id, **split):
     data = {"recipe_id": recipe_id, "made_on": "2026-10-12"}
     data.update({f"qty_{locs[name]}": qty for name, qty in split.items()})
     return client.post("/make", data=data, follow_redirects=True)
-
-
-def test_requires_login(app):
-    client = app.test_client()
-    resp = client.get("/")
-    assert resp.status_code == 302 and "/login" in resp.headers["Location"]
-    assert client.post("/login", data={"password": "nope"}).status_code == 200
-    assert client.get("/").status_code == 302
-    resp = client.post("/login", data={"password": PASSWORD, "next": "https://evil.example"})
-    assert resp.headers["Location"] == "/"
-    assert client.get("/").status_code == 200
 
 
 def test_healthz_is_public(app):

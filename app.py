@@ -1,7 +1,5 @@
-import hmac
 import os
-from datetime import datetime, timedelta
-from functools import wraps
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -15,7 +13,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    session,
     url_for,
 )
 from psycopg.rows import dict_row
@@ -33,20 +30,17 @@ def create_app(config=None):
     app = Flask(__name__)
     app.config.update(
         DATABASE_URL=os.environ.get("DATABASE_URL"),
-        APP_PASSWORD=os.environ.get("APP_PASSWORD"),
-        SECRET_KEY=os.environ.get("SECRET_KEY"),
+        # The session cookie only carries flash messages (there's no login),
+        # so a fixed fallback key is fine.
+        SECRET_KEY=os.environ.get("SECRET_KEY", "meal-tracker-flash-messages"),
         TIMEZONE=os.environ.get("APP_TIMEZONE", "America/New_York"),
-        PERMANENT_SESSION_LIFETIME=timedelta(days=180),
         SESSION_COOKIE_SAMESITE="Lax",
-        # Render sets RENDER=true; locally we're on plain http.
-        SESSION_COOKIE_SECURE=os.environ.get("RENDER") == "true",
     )
     if config:
         app.config.update(config)
 
-    missing = [k for k in ("DATABASE_URL", "APP_PASSWORD", "SECRET_KEY") if not app.config[k]]
-    if missing:
-        raise RuntimeError(f"Missing required settings: {', '.join(missing)}")
+    if not app.config["DATABASE_URL"]:
+        raise RuntimeError("Missing required setting: DATABASE_URL")
 
     app.config["TZ"] = ZoneInfo(app.config["TIMEZONE"])
     init_db(app.config["DATABASE_URL"])
@@ -170,23 +164,6 @@ def parse_date(value):
         raise ValueError("Pick the date it was made.")
 
 
-def login_required(view):
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if not session.get("logged_in"):
-            return redirect(url_for("login", next=request.path))
-        return view(*args, **kwargs)
-
-    return wrapped
-
-
-def safe_next(target):
-    # Only allow local paths so the login form can't redirect off-site.
-    if target and target.startswith("/") and not target.startswith("//"):
-        return target
-    return url_for("inventory")
-
-
 # --- routes ---------------------------------------------------------------
 
 
@@ -195,25 +172,7 @@ def register_routes(app):
     def healthz():
         return "ok"
 
-    @app.route("/login", methods=["GET", "POST"])
-    def login():
-        if request.method == "POST":
-            password = request.form.get("password", "")
-            if hmac.compare_digest(password.encode(), app.config["APP_PASSWORD"].encode()):
-                session.clear()
-                session.permanent = True
-                session["logged_in"] = True
-                return redirect(safe_next(request.form.get("next")))
-            flash("Wrong password.", "error")
-        return render_template("login.html", next=request.args.get("next", ""))
-
-    @app.post("/logout")
-    def logout():
-        session.clear()
-        return redirect(url_for("login"))
-
     @app.get("/")
-    @login_required
     def inventory():
         db = get_db()
         locations = get_locations(db)
@@ -237,7 +196,6 @@ def register_routes(app):
         )
 
     @app.route("/make", methods=["GET", "POST"])
-    @login_required
     def make_batch():
         db = get_db()
         locations = get_locations(db)
@@ -284,7 +242,6 @@ def register_routes(app):
         )
 
     @app.route("/move", methods=["GET", "POST"])
-    @login_required
     def move():
         db = get_db()
         locations = get_locations(db)
@@ -331,7 +288,6 @@ def register_routes(app):
         )
 
     @app.get("/recipes")
-    @login_required
     def recipes():
         db = get_db()
         stock = get_stock_map(db)
@@ -345,7 +301,6 @@ def register_routes(app):
         )
 
     @app.route("/recipes/new", methods=["GET", "POST"])
-    @login_required
     def new_recipe():
         if request.method == "POST":
             recipe_id = save_recipe(None)
@@ -355,7 +310,6 @@ def register_routes(app):
         return render_template("recipe_form.html", recipe=request.form, is_new=True)
 
     @app.route("/recipes/<int:recipe_id>/edit", methods=["GET", "POST"])
-    @login_required
     def edit_recipe(recipe_id):
         recipe = load_recipe(recipe_id)
         if request.method == "POST":
@@ -366,7 +320,6 @@ def register_routes(app):
         return render_template("recipe_form.html", recipe=recipe, is_new=False)
 
     @app.get("/recipes/<int:recipe_id>")
-    @login_required
     def recipe_detail(recipe_id):
         db = get_db()
         recipe = load_recipe(recipe_id)
@@ -390,7 +343,6 @@ def register_routes(app):
         )
 
     @app.get("/history")
-    @login_required
     def history():
         db = get_db()
         movements = db.execute(
@@ -407,7 +359,6 @@ def register_routes(app):
         return render_template("history.html", movements=movements)
 
     @app.post("/history/<int:movement_id>/undo")
-    @login_required
     def undo_movement(movement_id):
         db = get_db()
         try:

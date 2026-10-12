@@ -8,12 +8,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  {% if session.logged_in %}
   <header class="topbar">
     <a class="brand" href="{{ url_for('inventory') }}">Meal Tracker</a>
-    <form method="post" action="{{ url_for('logout') }}">
-      <button class="link-button" type="submit">Log out</button>
-    </form>
   </header>
   <nav class="tabs">
     {% set ep = request.endpoint %}
@@ -23,7 +19,6 @@
     <a href="{{ url_for('recipes') }}" class="{{ 'active' if ep in ('recipes', 'new_recipe', 'edit_recipe', 'recipe_detail') }}">Recipes</a>
     <a href="{{ url_for('history') }}" class="{{ 'active' if ep == 'history' }}">History</a>
   </nav>
-  {% endif %}
 
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}

@@ -14,8 +14,3 @@ services:
       # Neon connection string (postgresql://...?sslmode=require). Set in the Render dashboard.
       - key: DATABASE_URL
         sync: false
-      # The shared login password. Set in the Render dashboard.
-      - key: APP_PASSWORD
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true

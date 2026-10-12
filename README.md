@@ -10,7 +10,7 @@ Tracks home-made tube-feed recipes and how many meals of each are in the
 - **History**: every change, with undo.
 
 Python + Flask, Postgres (hosted free on [Neon](https://neon.tech)), deployed free on [Render](https://render.com).
-Login is a single shared password.
+There's no login: anyone with the URL can use it.
 
 ## Running locally
 
@@ -20,7 +20,7 @@ python -m venv .venv
 .venv\Scripts\python dev_server.py
 ```
 
-Open http://localhost:5000 and log in with `dev`. This starts a throwaway local
+Open http://localhost:5000. This starts a throwaway local
 Postgres in `.pgdata/`, so you don't need Neon locally. Delete that folder to start fresh.
 
 Tests:
@@ -33,11 +33,9 @@ Tests:
 
 1. **Neon**: create a free project, then copy its connection string
    (`postgresql://...neon.tech/neondb?sslmode=require`).
-2. **Render**: New → Blueprint → pick this repo. It reads `render.yaml` and asks for:
-   - `DATABASE_URL`: the Neon connection string
-   - `APP_PASSWORD`: the password you two will log in with
-
-   `SECRET_KEY` is generated automatically. Tables are created on first start.
+2. **Render**: New → Blueprint → pick this repo. It reads `render.yaml`. Then set
+   `DATABASE_URL` to the Neon connection string (service → Environment).
+   Tables are created on first start.
 
 The free Render service sleeps after ~15 minutes idle, so the first load after
 that takes 30 to 60 seconds.
