@@ -367,8 +367,8 @@ class FakeNtfy:
     def __init__(self):
         self.sent = []
 
-    def __call__(self, server, topic, title, message, **kwargs):
-        self.sent.append({"server": server, "topic": topic, "title": title, "message": message, **kwargs})
+    def __call__(self, server, payload, token=None):
+        self.sent.append({"server": server, "token": token, **payload})
 
 
 @pytest.fixture
@@ -378,18 +378,22 @@ def ntfy(app):
     return fake
 
 
-def test_send_to_phone_button(client, ntfy):
+ALL_OUT = [
+    "🚨 MAKE Breakfast: none left!", "🚨 MAKE Lunch: none left!",
+    "🚨 MAKE Snack: none left!", "🚨 MAKE Dinner: none left!",
+]
+
+
+def test_send_to_phone_button(client, app, ntfy):
+    app.config["NTFY_TOKEN"] = "tk_test"
     resp = client.post("/report/test", follow_redirects=True)
     assert b"Sent today&#39;s report to your phone" in resp.data
     (msg,) = ntfy.sent
     assert msg["topic"] == "test-topic" and msg["title"].startswith("Thomas's meals · ")
     # Only the to-dos: no stock counts, so it fits on the lock screen.
-    assert msg["message"].splitlines() == [
-        "🚨 MAKE Breakfast: none left!", "🚨 MAKE Lunch: none left!",
-        "🚨 MAKE Snack: none left!", "🚨 MAKE Dinner: none left!",
-    ]
+    assert msg["message"].splitlines() == ALL_OUT
     assert msg["priority"] == 4 and msg["tags"] == ["rotating_light"]
-    assert msg["click"] == "https://example.test"
+    assert msg["click"] == "https://example.test" and msg["token"] == "tk_test"
 
 
 def test_send_without_topic_explains(client, app):
@@ -403,19 +407,38 @@ def test_send_failure_is_reported(client, app, ntfy):
         raise OSError("network down")
     app.config["SEND_NOTIFICATION"] = boom
     assert b"network down" in client.post("/report/test", follow_redirects=True).data
-    resp = client.post("/report/send")
-    assert resp.status_code == 500
 
 
-def test_scheduled_send_once_per_day_after_report_hour(client, app, ntfy):
+def test_rate_limit_message_is_friendly(client, app, ntfy):
+    import io, urllib.error
+    def limited(*args, **kwargs):
+        raise urllib.error.HTTPError("https://ntfy.sh", 429, "Too Many Requests", {}, io.BytesIO())
+    app.config["SEND_NOTIFICATION"] = limited
+    resp = client.post("/report/test", follow_redirects=True)
+    assert b"ntfy is busy right now" in resp.data
+
+
+def test_scheduled_report_due_once_per_day_after_report_hour(client, app, ntfy):
     app.config["REPORT_HOUR"] = 24  # never reached
-    assert b"Too early" in client.post("/report/send").data
-    assert ntfy.sent == []
+    assert client.post("/report/due").json["due"] is False
+    assert "Too early" in client.post("/report/due").json["reason"]
 
     app.config["REPORT_HOUR"] = 0
-    assert client.post("/report/send").data == b"Sent.\n"
-    assert client.post("/report/send").data == b"Already sent today.\n"
-    assert len(ntfy.sent) == 1
+    due = client.post("/report/due").json
+    assert due["due"] is True and due["server"] == "https://ntfy.sh"
+    assert due["payload"]["topic"] == "test-topic" and due["payload"]["message"].splitlines() == ALL_OUT
+    assert "token" not in str(due)  # the token never leaves the server
+
+    # Still due until the scheduler confirms it sent it.
+    assert client.post("/report/due").json["due"] is True
+    assert client.post("/report/sent").json == {"ok": True}
+    assert client.post("/report/due").json == {"due": False, "reason": "Already sent today."}
+    assert ntfy.sent == []  # the scheduler publishes, not the server
+
+
+def test_report_not_due_without_topic(client, app):
+    app.config.update(NTFY_TOPIC=None, REPORT_HOUR=0)
+    assert client.post("/report/due").json == {"due": False, "reason": "NTFY_TOPIC is not set."}
 
 
 def test_quiet_priority_when_nothing_to_do(client, app, ntfy):

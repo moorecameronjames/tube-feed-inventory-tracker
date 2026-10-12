@@ -237,31 +237,34 @@ def register_routes(app):
         text = format_text(build_report(get_db(), today_local()))
         return text, 200, {"Content-Type": "text/plain; charset=utf-8"}
 
-    @app.post("/report/send")
-    def send_scheduled_report():
-        """Called by the scheduler. Sends once per day, at or after REPORT_HOUR local time.
+    @app.post("/report/due")
+    def report_due():
+        """Called by the GitHub Actions scheduler, which then publishes to ntfy itself.
 
-        The scheduler fires at two UTC times so one of them lands on the report hour in
-        both daylight and standard time; the other is skipped.
+        Sending from GitHub's rotating runner IPs avoids ntfy.sh's per-IP limit, which
+        Render's shared outbound IPs can exhaust. The scheduler fires at two UTC times
+        so one of them lands on REPORT_HOUR in both daylight and standard time; the
+        report is due once per day, at or after that hour, until /report/sent is called.
         """
         db = get_db()
         now = datetime.now(app.config["TZ"])
+        if not app.config["NTFY_TOPIC"]:
+            return {"due": False, "reason": "NTFY_TOPIC is not set."}
         if now.hour < app.config["REPORT_HOUR"]:
-            return f"Too early ({now:%H:%M}); not sent.\n"
-        with db.transaction():
-            db.execute("SELECT pg_advisory_xact_lock(4243)")
-            last = db.execute("SELECT value FROM app_state WHERE key = 'report_last_sent'").fetchone()
-            if last and last["value"] == now.date().isoformat():
-                return "Already sent today.\n"
-            error = push_report(db)
-            if error:
-                return error + "\n", 500
-            db.execute(
-                """INSERT INTO app_state (key, value) VALUES ('report_last_sent', %s)
-                   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
-                (now.date().isoformat(),),
-            )
-        return "Sent.\n"
+            return {"due": False, "reason": f"Too early ({now:%H:%M})."}
+        if get_state(db, "report_last_sent") == now.date().isoformat():
+            return {"due": False, "reason": "Already sent today."}
+        return {"due": True, "server": app.config["NTFY_SERVER"], "payload": notification_payload(db)}
+
+    @app.post("/report/sent")
+    def report_sent():
+        db = get_db()
+        db.execute(
+            """INSERT INTO app_state (key, value) VALUES ('report_last_sent', %s)
+               ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""",
+            (today_local().isoformat(),),
+        )
+        return {"ok": True}
 
     @app.post("/report/test")
     def send_test_report():
@@ -571,11 +574,14 @@ def save_recipe(recipe_id):
         return None
 
 
-def push_report(db):
-    """Send today's report via ntfy. Returns an error message, or None on success."""
+def get_state(db, key):
+    row = db.execute("SELECT value FROM app_state WHERE key = %s", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def notification_payload(db):
+    """Today's report as an ntfy JSON message: just the to-dos, so it fits on the lock screen."""
     config = current_app.config
-    if not config["NTFY_TOPIC"]:
-        return "Notifications aren't set up yet (NTFY_TOPIC is missing)."
     report = build_report(db, today_local())
     levels = {a["level"] for a in report["actions"]}
     if "urgent" in levels:
@@ -584,18 +590,29 @@ def push_report(db):
         priority, tags = 3, ["clipboard"]
     else:
         priority, tags = 2, ["white_check_mark"]
+    payload = {
+        "topic": config["NTFY_TOPIC"],
+        "title": format_title(report),
+        "message": format_actions(report),
+        "priority": priority,
+        "tags": tags,
+    }
+    if config["PUBLIC_URL"]:
+        payload["click"] = config["PUBLIC_URL"]
+    return payload
+
+
+def push_report(db):
+    """Send today's report via ntfy from this server. Returns an error message, or None."""
+    config = current_app.config
+    if not config["NTFY_TOPIC"]:
+        return "Notifications aren't set up yet (NTFY_TOPIC is missing)."
     try:
-        config["SEND_NOTIFICATION"](
-            config["NTFY_SERVER"],
-            config["NTFY_TOPIC"],
-            format_title(report),
-            format_actions(report),
-            priority=priority,
-            tags=tags,
-            click=config["PUBLIC_URL"],
-            token=config["NTFY_TOKEN"],
-        )
+        config["SEND_NOTIFICATION"](config["NTFY_SERVER"], notification_payload(db), token=config["NTFY_TOKEN"])
     except OSError as e:
         current_app.logger.exception("Sending the report failed")
+        if getattr(e, "code", None) == 429:
+            return ("ntfy is busy right now (too many requests from this server). "
+                    "Try again in a few minutes; the 7 AM report is sent separately.")
         return f"Couldn't send the notification: {e}"
     return None

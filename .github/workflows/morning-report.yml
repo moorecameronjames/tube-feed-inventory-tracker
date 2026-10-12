@@ -1,10 +1,16 @@
 # Sends the morning report to the ntfy app each day.
 #
+# The message is published from this GitHub runner, not from Render: ntfy.sh's
+# free tier rate-limits by sender IP, and Render's free tier shares its outbound
+# IPs with many other apps. GitHub runners come from a large rotating pool.
+#
 # GitHub cron runs in UTC, so this fires at 11:00 and 12:00 UTC. That's 7 AM
 # and 8 AM Eastern in daylight time, 6 AM and 7 AM in standard time. The app
-# only sends once a day, at or after REPORT_HOUR (7 AM), so exactly one goes out.
+# says the report is due once a day, at or after REPORT_HOUR (7 AM), so exactly
+# one goes out.
 #
 # Needs a repository secret APP_URL = the Render site URL (no trailing slash).
+# The repo is public, so this never prints the message or topic to the log.
 name: Morning report
 
 on:
@@ -17,10 +23,31 @@ jobs:
   send:
     runs-on: ubuntu-latest
     steps:
-      - name: Ask the app to send today's report
+      - name: Send today's report
         env:
           APP_URL: ${{ secrets.APP_URL }}
         run: |
-          # The free Render service may be asleep; the first request wakes it.
-          curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 120 \
-            -X POST "$APP_URL/report/send"
+          set -euo pipefail
+
+          # Ask the app what to send. The free Render service may be asleep;
+          # the first request wakes it.
+          due=$(curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 120 \
+            -X POST "$APP_URL/report/due")
+          # Separate assignments so a parse failure stops the job instead of looking like "not due".
+          is_due=$(jq -r .due <<<"$due")
+          if [ "$is_due" != "true" ]; then
+            reason=$(jq -r .reason <<<"$due")
+            echo "Not sending: $reason"
+            exit 0
+          fi
+          server=$(jq -re .server <<<"$due")
+          payload=$(jq -ce .payload <<<"$due")
+
+          # Publish to ntfy (curl retries 429 Too Many Requests on its own).
+          printf '%s' "$payload" | curl -fsS -o /dev/null --retry 5 --retry-delay 20 --max-time 30 \
+            -H "Content-Type: application/json" --data-binary @- "$server"
+
+          # Record it so the second trigger doesn't send it again.
+          curl -fsS -o /dev/null --retry 4 --retry-delay 15 --retry-all-errors --max-time 60 \
+            -X POST "$APP_URL/report/sent"
+          echo "Sent."

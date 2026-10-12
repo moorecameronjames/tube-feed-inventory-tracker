@@ -57,10 +57,14 @@ the Stock page, and `/report.txt` has the plain-text version.
 Setup:
 1. Install ntfy on each phone and subscribe to your topic name (treat it like a password).
 2. In Render, set `NTFY_TOPIC` to that topic name. Then use **Send to phone** on the Stock page to test.
-   Also set `NTFY_TOKEN` to an access token from a free ntfy.sh account (Account → Access tokens).
-   ntfy.sh rate-limits anonymous senders per IP, and Render's free tier shares its IPs with
-   other apps, so without a token you can hit "429 Too Many Requests".
 3. In GitHub, add a repository secret `APP_URL` with the Render site URL.
-   `.github/workflows/morning-report.yml` then triggers the send daily around 7 AM Eastern
+   `.github/workflows/morning-report.yml` then sends the report daily around 7 AM Eastern
    (`REPORT_HOUR`). GitHub pauses scheduled workflows after 60 days without repo
    activity; re-enable it from the Actions tab if that happens.
+
+ntfy.sh's free tier allows 250 messages a day **per sender IP**, even with an account,
+and Render's free tier shares its outbound IPs with many other apps. So the morning
+report is published from the GitHub Actions runner (which asks the app what to send via
+`POST /report/due`, then confirms with `POST /report/sent`), not from Render. The
+**Send to phone** button still sends from Render and retries briefly if ntfy says it's
+busy. `NTFY_TOKEN` (an ntfy access token) only lifts that limit on a paid ntfy plan.

@@ -21,7 +21,7 @@ services:
       # Local hour (APP_TIMEZONE) the morning report goes out.
       - key: REPORT_HOUR
         value: "7"
-      # Optional ntfy access token (ntfy.sh account → Access tokens). Sending as a
-      # logged-in user avoids the per-IP rate limit shared with other Render apps.
+      # Optional ntfy access token, used by the Send to phone button. It only lifts
+      # ntfy.sh's per-IP rate limit on a paid ntfy plan; free accounts stay per-IP.
       - key: NTFY_TOKEN
         sync: false
