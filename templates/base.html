@@ -3,13 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#2f6f5e">
-  <title>{% block title %}Meal Tracker{% endblock %}</title>
+  <meta name="theme-color" content="#1d3557">
+  <title>{% block title %}Thomas Tube Tracking{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="apple-mobile-web-app-title" content="Thomas Tube">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('inventory') }}">Meal Tracker</a>
+    <a class="brand" href="{{ url_for('inventory') }}">
+      <img src="{{ url_for('static', filename='logo-mark.svg') }}" alt="">
+      Thomas Tube Tracking
+    </a>
   </header>
   <nav class="tabs">
     {% set ep = request.endpoint %}

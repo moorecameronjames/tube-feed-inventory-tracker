@@ -1,4 +1,6 @@
-# Tube Feed Meal Tracker
+# Thomas Tube Tracking
+
+<img src="static/logo.svg" alt="Thomas Tube Tracking" width="320">
 
 Tracks home-made tube-feed recipes and how many meals of each are in the
 **Freezer**, **Fridge (thawing)**, and **Fridge (in syringes)**.

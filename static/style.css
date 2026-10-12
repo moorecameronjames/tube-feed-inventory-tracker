@@ -1,32 +1,38 @@
+/* Thomas Tube Tracking palette: navy #1D3557, coral #F2765A, aqua #A8DADC, cream #FDF6EE */
 :root {
-  --bg: #f6f5f1;
+  --brand: #1d3557;          /* header bar, same in both modes */
+  --bg: #fdf6ee;
   --card: #ffffff;
-  --text: #1f2a27;
-  --muted: #6b7774;
-  --border: #dfe3df;
-  --accent: #2f6f5e;
+  --text: #1b2a41;
+  --muted: #5f6b7a;
+  --border: #ebe1d4;
+  --accent: #1d3557;         /* buttons, links */
   --accent-text: #ffffff;
-  --accent-soft: #e3efea;
+  --accent-soft: #e2f1f2;    /* number pills */
+  --highlight: #f2765a;      /* active tab, totals (decoration only, not text) */
+  --highlight-soft: #fde6de;
   --error-bg: #fbe9e7;
   --error-text: #8a2a1c;
-  --success-bg: #e6f2ea;
-  --success-text: #1e5b37;
+  --success-bg: #e2f1f2;
+  --success-text: #1d4a57;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #141917;
-    --card: #1d2421;
-    --text: #e6ece9;
-    --muted: #9aa7a2;
-    --border: #2f3a36;
-    --accent: #5fb39a;
-    --accent-text: #0e1a16;
-    --accent-soft: #23362f;
+    --bg: #0f1a2b;
+    --card: #17253a;
+    --text: #eaf0f7;
+    --muted: #9aa8ba;
+    --border: #26364f;
+    --accent: #a8dadc;
+    --accent-text: #0f1a2b;
+    --accent-soft: #1f3550;
+    --highlight: #f2765a;
+    --highlight-soft: #3b2a31;
     --error-bg: #3a1f1b;
     --error-text: #f2b8ad;
-    --success-bg: #1b3326;
-    --success-text: #a9dcbc;
+    --success-bg: #1d3a45;
+    --success-text: #bfe6e8;
   }
 }
 
@@ -47,20 +53,23 @@ main { max-width: 720px; margin: 0 auto; padding: 16px; }
 
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; background: var(--accent); color: var(--accent-text);
+  padding: 8px 16px; background: var(--brand); color: #ffffff;
 }
-.topbar .brand { color: inherit; font-weight: 700; text-decoration: none; }
-.topbar .link-button { color: inherit; }
+.topbar .brand {
+  display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none;
+  font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 1.15rem;
+}
+.topbar .brand img { width: 56px; height: auto; display: block; }
 
 .tabs {
   display: flex; overflow-x: auto; background: var(--card);
   border-bottom: 1px solid var(--border);
 }
 .tabs a {
-  flex: 1 0 auto; padding: 12px 14px; text-align: center; white-space: nowrap;
+  flex: 1 1 auto; padding: 12px 4px; text-align: center; white-space: nowrap; font-size: 0.9rem;
   color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent;
 }
-.tabs a.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs a.active { color: var(--accent); border-bottom-color: var(--highlight); font-weight: 600; }
 
 .card {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -82,7 +91,7 @@ main { max-width: 720px; margin: 0 auto; padding: 16px; }
 }
 .stat-number { font-size: 1.6rem; font-weight: 700; }
 .stat-label { font-size: 0.8rem; color: var(--muted); }
-.stat-total { background: var(--accent-soft); }
+.stat-total { background: var(--highlight-soft); border-color: var(--highlight); }
 
 .table-wrap { overflow-x: auto; }
 table.stock {
