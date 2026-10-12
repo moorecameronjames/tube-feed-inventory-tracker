@@ -17,7 +17,6 @@ from flask import (
 )
 from psycopg.rows import dict_row
 
-import notify
 from report import build_report, format_actions, format_text, format_title
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
@@ -38,16 +37,13 @@ def create_app(config=None):
         SECRET_KEY=os.environ.get("SECRET_KEY", "meal-tracker-flash-messages"),
         TIMEZONE=os.environ.get("APP_TIMEZONE", "America/New_York"),
         SESSION_COOKIE_SAMESITE="Lax",
-        # Morning report push notifications (ntfy). No topic = sending is off.
+        # Morning report push notifications (ntfy), published by the GitHub Actions
+        # workflow from what /report/due returns. No topic = sending is off.
         NTFY_SERVER=os.environ.get("NTFY_SERVER", "https://ntfy.sh"),
         NTFY_TOPIC=os.environ.get("NTFY_TOPIC"),
-        # Optional ntfy access token: sending as a logged-in user gets its own rate
-        # limit instead of sharing one with every app on Render's outbound IPs.
-        NTFY_TOKEN=os.environ.get("NTFY_TOKEN"),
         REPORT_HOUR=int(os.environ.get("REPORT_HOUR", "7")),
         # Render sets this; tapping the notification opens the app.
         PUBLIC_URL=os.environ.get("RENDER_EXTERNAL_URL"),
-        SEND_NOTIFICATION=notify.send_ntfy,
     )
     if config:
         app.config.update(config)
@@ -266,14 +262,45 @@ def register_routes(app):
         )
         return {"ok": True}
 
-    @app.post("/report/test")
-    def send_test_report():
-        error = push_report(get_db())
-        if error:
-            flash(error, "error")
-        else:
-            flash("Sent today's report to your phone.", "success")
-        return redirect(url_for("inventory"))
+    @app.route("/fed", methods=["GET", "POST"])
+    def fed_meal():
+        """One-tap 'Thomas just had this': takes 1 meal out of the syringes."""
+        db = get_db()
+        syringes = db.execute("SELECT * FROM locations WHERE short_name = 'Syringes'").fetchone()
+
+        if request.method == "POST":
+            try:
+                recipe_id, category_id = parse_item(request.form.get("meal"))
+                with db.transaction():
+                    apply_movement(db, recipe_id, category_id, syringes["id"], None, 1)
+                    db.execute(
+                        """INSERT INTO movements (recipe_id, category_id, kind, from_location_id, quantity)
+                           VALUES (%s, %s, 'used', %s, 1)""",
+                        (recipe_id, category_id, syringes["id"]),
+                    )
+            except (ValueError, StockError) as e:
+                flash(str(e), "error")
+                return redirect(url_for("fed_meal"))
+            n = db.execute(
+                """SELECT r.name AS recipe, c.name AS category, COALESCE(s.quantity, 0) AS left
+                   FROM recipes r JOIN categories c ON c.id = %s
+                   LEFT JOIN stock s ON s.recipe_id = r.id AND s.category_id = c.id AND s.location_id = %s
+                   WHERE r.id = %s""",
+                (category_id, syringes["id"], recipe_id),
+            ).fetchone()
+            flash(f"Fed 1 {n['recipe']} ({n['category']}). {n['left']} left in syringes.", "success")
+            return redirect(url_for("inventory"))
+
+        meals = db.execute(
+            """SELECT s.recipe_id, s.category_id, s.quantity, r.name AS recipe, c.name AS category
+               FROM stock s
+               JOIN recipes r ON r.id = s.recipe_id
+               JOIN categories c ON c.id = s.category_id
+               WHERE s.location_id = %s AND s.quantity > 0
+               ORDER BY c.sort_order, lower(r.name)""",
+            (syringes["id"],),
+        ).fetchall()
+        return render_template("fed.html", meals=meals)
 
     @app.route("/make", methods=["GET", "POST"])
     def make_batch():
@@ -600,19 +627,3 @@ def notification_payload(db):
     if config["PUBLIC_URL"]:
         payload["click"] = config["PUBLIC_URL"]
     return payload
-
-
-def push_report(db):
-    """Send today's report via ntfy from this server. Returns an error message, or None."""
-    config = current_app.config
-    if not config["NTFY_TOPIC"]:
-        return "Notifications aren't set up yet (NTFY_TOPIC is missing)."
-    try:
-        config["SEND_NOTIFICATION"](config["NTFY_SERVER"], notification_payload(db), token=config["NTFY_TOKEN"])
-    except OSError as e:
-        current_app.logger.exception("Sending the report failed")
-        if getattr(e, "code", None) == 429:
-            return ("ntfy is busy right now (too many requests from this server). "
-                    "Try again in a few minutes; the 7 AM report is sent separately.")
-        return f"Couldn't send the notification: {e}"
-    return None

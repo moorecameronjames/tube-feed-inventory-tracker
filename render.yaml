@@ -21,7 +21,3 @@ services:
       # Local hour (APP_TIMEZONE) the morning report goes out.
       - key: REPORT_HOUR
         value: "7"
-      # Optional ntfy access token, used by the Send to phone button. It only lifts
-      # ntfy.sh's per-IP rate limit on a paid ntfy plan; free accounts stay per-IP.
-      - key: NTFY_TOKEN
-        sync: false

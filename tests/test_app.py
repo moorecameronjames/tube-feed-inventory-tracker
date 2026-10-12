@@ -363,59 +363,15 @@ def test_report_nothing_to_do(client, app):
     assert b"Nothing to do today." in client.get("/").data
 
 
-class FakeNtfy:
-    def __init__(self):
-        self.sent = []
-
-    def __call__(self, server, payload, token=None):
-        self.sent.append({"server": server, "token": token, **payload})
-
-
 @pytest.fixture
 def ntfy(app):
-    fake = FakeNtfy()
-    app.config.update(NTFY_TOPIC="test-topic", SEND_NOTIFICATION=fake, PUBLIC_URL="https://example.test")
-    return fake
+    app.config.update(NTFY_TOPIC="test-topic", PUBLIC_URL="https://example.test")
 
 
 ALL_OUT = [
     "🚨 MAKE Breakfast: none left!", "🚨 MAKE Lunch: none left!",
     "🚨 MAKE Snack: none left!", "🚨 MAKE Dinner: none left!",
 ]
-
-
-def test_send_to_phone_button(client, app, ntfy):
-    app.config["NTFY_TOKEN"] = "tk_test"
-    resp = client.post("/report/test", follow_redirects=True)
-    assert b"Sent today&#39;s report to your phone" in resp.data
-    (msg,) = ntfy.sent
-    assert msg["topic"] == "test-topic" and msg["title"].startswith("Thomas's meals · ")
-    # Only the to-dos: no stock counts, so it fits on the lock screen.
-    assert msg["message"].splitlines() == ALL_OUT
-    assert msg["priority"] == 4 and msg["tags"] == ["rotating_light"]
-    assert msg["click"] == "https://example.test" and msg["token"] == "tk_test"
-
-
-def test_send_without_topic_explains(client, app):
-    app.config["NTFY_TOPIC"] = None
-    resp = client.post("/report/test", follow_redirects=True)
-    assert b"NTFY_TOPIC is missing" in resp.data
-
-
-def test_send_failure_is_reported(client, app, ntfy):
-    def boom(*args, **kwargs):
-        raise OSError("network down")
-    app.config["SEND_NOTIFICATION"] = boom
-    assert b"network down" in client.post("/report/test", follow_redirects=True).data
-
-
-def test_rate_limit_message_is_friendly(client, app, ntfy):
-    import io, urllib.error
-    def limited(*args, **kwargs):
-        raise urllib.error.HTTPError("https://ntfy.sh", 429, "Too Many Requests", {}, io.BytesIO())
-    app.config["SEND_NOTIFICATION"] = limited
-    resp = client.post("/report/test", follow_redirects=True)
-    assert b"ntfy is busy right now" in resp.data
 
 
 def test_scheduled_report_due_once_per_day_after_report_hour(client, app, ntfy):
@@ -427,13 +383,14 @@ def test_scheduled_report_due_once_per_day_after_report_hour(client, app, ntfy):
     due = client.post("/report/due").json
     assert due["due"] is True and due["server"] == "https://ntfy.sh"
     assert due["payload"]["topic"] == "test-topic" and due["payload"]["message"].splitlines() == ALL_OUT
-    assert "token" not in str(due)  # the token never leaves the server
+    payload = due["payload"]
+    assert payload["title"].startswith("Thomas's meals · ") and payload["click"] == "https://example.test"
+    assert payload["priority"] == 4 and payload["tags"] == ["rotating_light"]
 
     # Still due until the scheduler confirms it sent it.
     assert client.post("/report/due").json["due"] is True
     assert client.post("/report/sent").json == {"ok": True}
     assert client.post("/report/due").json == {"due": False, "reason": "Already sent today."}
-    assert ntfy.sent == []  # the scheduler publishes, not the server
 
 
 def test_report_not_due_without_topic(client, app):
@@ -445,5 +402,41 @@ def test_quiet_priority_when_nothing_to_do(client, app, ntfy):
     rid = add_recipe(client, "Soup")
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
         make_batch(client, app, rid, category=cat, Thawing=2, Freezer=2)
-    client.post("/report/test")
-    assert ntfy.sent[0]["priority"] == 2 and "Nothing to do today" in ntfy.sent[0]["message"]
+    app.config["REPORT_HOUR"] = 0
+    payload = client.post("/report/due").json["payload"]
+    assert payload["priority"] == 2 and payload["message"] == "✅ Nothing to do today."
+
+
+def test_fed_a_meal_takes_one_from_syringes(client, app):
+    soup = add_recipe(client, "Soup")
+    stew = add_recipe(client, "Stew")
+    make_batch(client, app, soup, category="Lunch", Syringes=2, Freezer=3)
+    make_batch(client, app, soup, category="Dinner", Syringes=1)
+    make_batch(client, app, stew, category="Dinner", Thawing=2)  # nothing in syringes
+
+    page = client.get("/fed").data.decode()
+    lunch_soup = f'value="{soup}:{category_ids(app)["Lunch"]}"'
+    assert lunch_soup in page and "2 in syringes" in page
+    assert "Stew" not in page  # only meals that are in syringes
+
+    resp = client.post("/fed", data={"meal": f"{soup}:{category_ids(app)['Lunch']}"}, follow_redirects=True)
+    assert b"Fed 1 Soup (Lunch). 1 left in syringes." in resp.data
+    assert stock(app, soup, "Lunch") == {"Syringes": 1, "Freezer": 3}
+    assert stock(app, soup, "Dinner") == {"Syringes": 1}
+    assert 'Used</strong> 1 Soup <span class="tag">Lunch</span> from Syringes' in client.get("/history").data.decode()
+
+
+def test_fed_a_meal_when_syringes_are_empty(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=2)
+    assert b"Nothing is in syringes right now." in client.get("/fed").data
+    # A stale tap (e.g. from another phone) doesn't go negative.
+    resp = client.post("/fed", data={"meal": f"{soup}:{category_ids(app)['Lunch']}"}, follow_redirects=True)
+    assert b"only 0 Soup (Lunch)" in resp.data
+    assert stock(app, soup) == {"Freezer": 2}
+
+
+def test_fed_button_on_stock_page_and_menu(client):
+    page = client.get("/").data.decode()
+    assert 'class="button fed-button" href="/fed"' in page
+    assert '<a href="/fed"' in page  # menu entry

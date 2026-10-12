@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
+<a class="button fed-button" href="{{ url_for('fed_meal') }}">Fed a meal</a>
+
 <section class="summary">
   {% for s in sections %}
   <a class="stat {{ 'stat-empty' if not s.total }}" href="#cat-{{ s.category.id }}">
@@ -20,9 +22,6 @@
   {% else %}
   <p class="muted">Nothing to do today.</p>
   {% endif %}
-  <form method="post" action="{{ url_for('send_test_report') }}" class="todo-send">
-    <button class="link-button" type="submit">Send to phone</button>
-  </form>
 </section>
 
 {% if grand_total %}
