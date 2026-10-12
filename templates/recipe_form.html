@@ -8,13 +8,7 @@
     <input id="name" name="name" value="{{ recipe.get('name', '') }}" required autofocus>
 
     <label for="ingredients">Ingredients</label>
-    <textarea id="ingredients" name="ingredients" rows="6">{{ recipe.get('ingredients', '') }}</textarea>
-
-    <label for="instructions">Instructions</label>
-    <textarea id="instructions" name="instructions" rows="6">{{ recipe.get('instructions', '') }}</textarea>
-
-    <label for="notes">Notes</label>
-    <textarea id="notes" name="notes" rows="3">{{ recipe.get('notes', '') }}</textarea>
+    <textarea id="ingredients" name="ingredients" rows="8">{{ recipe.get('ingredients', '') }}</textarea>
 
     {% if not is_new %}
     <label class="checkbox">

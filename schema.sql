@@ -17,11 +17,13 @@ CREATE TABLE IF NOT EXISTS recipes (
     id            SERIAL PRIMARY KEY,
     name          TEXT NOT NULL UNIQUE,
     ingredients   TEXT NOT NULL DEFAULT '',
-    instructions  TEXT NOT NULL DEFAULT '',
-    notes         TEXT NOT NULL DEFAULT '',
     archived      BOOLEAN NOT NULL DEFAULT FALSE,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Removed fields (for databases created before they were dropped).
+ALTER TABLE recipes DROP COLUMN IF EXISTS instructions;
+ALTER TABLE recipes DROP COLUMN IF EXISTS notes;
 
 -- One row each time a recipe is made.
 CREATE TABLE IF NOT EXISTS batches (

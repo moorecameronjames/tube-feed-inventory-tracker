@@ -429,24 +429,16 @@ def save_recipe(recipe_id):
     if not name:
         flash("Give the recipe a name.", "error")
         return None
-    fields = (
-        name,
-        form.get("ingredients", "").strip(),
-        form.get("instructions", "").strip(),
-        form.get("notes", "").strip(),
-    )
+    fields = (name, form.get("ingredients", "").strip())
     db = get_db()
     try:
         if recipe_id is None:
             return db.execute(
-                """INSERT INTO recipes (name, ingredients, instructions, notes)
-                   VALUES (%s, %s, %s, %s) RETURNING id""",
+                "INSERT INTO recipes (name, ingredients) VALUES (%s, %s) RETURNING id",
                 fields,
             ).fetchone()["id"]
         db.execute(
-            """UPDATE recipes SET name = %s, ingredients = %s, instructions = %s, notes = %s,
-                      archived = %s
-               WHERE id = %s""",
+            "UPDATE recipes SET name = %s, ingredients = %s, archived = %s WHERE id = %s",
             (*fields, bool(form.get("archived")), recipe_id),
         )
         return recipe_id

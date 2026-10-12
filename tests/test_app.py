@@ -180,3 +180,21 @@ def test_history_filter_by_recipe(client, app):
     # Junk filter values just show everything.
     assert client.get("/history?recipe_id=abc").status_code == 200
     assert client.get("/history?recipe_id=99999").status_code == 200
+
+
+def test_old_recipe_columns_are_dropped(app, pg_uri):
+    # A database created before instructions/notes were removed gets migrated on startup.
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute("ALTER TABLE recipes ADD COLUMN instructions TEXT, ADD COLUMN notes TEXT")
+    create_app({"DATABASE_URL": pg_uri})
+    with psycopg.connect(pg_uri) as conn:
+        cols = {r[0] for r in conn.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'recipes'")}
+    assert "instructions" not in cols and "notes" not in cols and "ingredients" in cols
+
+
+def test_edit_recipe_ingredients(client):
+    rid = add_recipe(client, "Soup")
+    client.post(f"/recipes/{rid}/edit", data={"name": "Soup", "ingredients": "broth\ncarrots"})
+    page = client.get(f"/recipes/{rid}").data.decode()
+    assert "broth\ncarrots" in page and "Instructions" not in page

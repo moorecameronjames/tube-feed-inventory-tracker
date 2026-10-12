@@ -6,7 +6,7 @@ Tracks home-made tube-feed recipes and how many meals of each are in the
 - **Stock**: counts per recipe and location. Tap a number to move or use those meals.
 - **Made**: log a batch and split it across locations ("3 fridge, 3 freezer").
 - **Move / Use**: move meals between locations, mark them used, or throw them out.
-- **Recipes**: ingredients, instructions, notes, and batch history.
+- **Recipes**: ingredients and batch history.
 - **History**: every change, with undo.
 
 Python + Flask, Postgres (hosted free on [Neon](https://neon.tech)), deployed free on [Render](https://render.com).
