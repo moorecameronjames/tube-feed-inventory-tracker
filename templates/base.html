@@ -14,13 +14,13 @@
 </head>
 <body>
   <header class="topbar">
+    <button class="menu-button" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-menu">
+      <span></span><span></span><span></span>
+    </button>
     <a class="brand" href="{{ url_for('inventory') }}">
       <img src="{{ url_for('static', filename='logo-mark.svg') }}" alt="">
       Thomas Tube Tracking
     </a>
-    <button class="menu-button" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-    </button>
     <nav class="menu" id="site-menu" hidden>
       {% set ep = request.endpoint %}
       <a href="{{ url_for('inventory') }}" class="{{ 'active' if ep == 'inventory' }}">Stock</a>

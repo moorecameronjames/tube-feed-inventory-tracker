@@ -61,7 +61,7 @@ main { max-width: 720px; margin: 0 auto; padding: 16px; }
 }
 .topbar .brand img { width: 56px; height: auto; display: block; }
 
-.topbar { position: relative; }
+.topbar { position: relative; justify-content: flex-start; gap: 8px; padding-left: 8px; }
 .menu-button {
   margin: 0; padding: 10px 8px; width: 44px; height: 44px; background: none; border-radius: 8px;
   display: flex; flex-direction: column; justify-content: center; gap: 5px;
@@ -77,7 +77,7 @@ main { max-width: 720px; margin: 0 auto; padding: 16px; }
 .menu-button[aria-expanded="true"] span:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
 
 .menu {
-  position: absolute; top: 100%; right: 8px; z-index: 10; min-width: 210px; margin-top: 6px;
+  position: absolute; top: 100%; left: 8px; z-index: 10; min-width: 210px; margin-top: 6px;
   background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
   box-shadow: 0 10px 28px rgba(15, 26, 43, 0.22);
 }
