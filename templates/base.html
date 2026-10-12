@@ -23,7 +23,7 @@
     </a>
     <nav class="menu" id="site-menu" hidden>
       {% set ep = request.endpoint %}
-      <a href="{{ url_for('fed_meal') }}" class="{{ 'active' if ep == 'fed_meal' }}">Fed a meal</a>
+      <a href="{{ url_for('fed_meal') }}" class="{{ 'active' if ep == 'fed_meal' }}">Feeding Time!</a>
       <a href="{{ url_for('inventory') }}" class="{{ 'active' if ep == 'inventory' }}">Stock</a>
       <a href="{{ url_for('make_batch') }}" class="{{ 'active' if ep == 'make_batch' }}">Made a batch</a>
       <a href="{{ url_for('move') }}" class="{{ 'active' if ep == 'move' }}">Move / Use</a>
