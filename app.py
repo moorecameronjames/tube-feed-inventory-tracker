@@ -18,7 +18,7 @@ from flask import (
 from psycopg.rows import dict_row
 
 import notify
-from report import build_report, format_text, format_title
+from report import build_report, format_actions, format_text, format_title
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -586,7 +586,7 @@ def push_report(db):
             config["NTFY_SERVER"],
             config["NTFY_TOPIC"],
             format_title(report),
-            format_text(report, include_title=False),
+            format_actions(report),
             priority=priority,
             tags=tags,
             click=config["PUBLIC_URL"],

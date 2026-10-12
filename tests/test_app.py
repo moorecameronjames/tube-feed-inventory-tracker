@@ -318,7 +318,7 @@ def test_report_when_empty(client):
     text = report_text(client)
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
         assert f"{cat}: 0\n" in text
-        assert f"MAKE MORE {cat}: none left!" in text
+        assert f"MAKE {cat}: none left!" in text
     assert "THAW" not in text
 
 
@@ -343,16 +343,16 @@ def test_report_rules(client, app):
 
     actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠🧊"]
     assert actions == [
-        "🚨 MAKE MORE Dinner: none left!",
-        "⚠️ MAKE MORE Breakfast: only 1 left.",
-        "🧊 THAW Breakfast: nothing in the fridge. Oats has 1 in the freezer.",
-        "🧊 THAW Snack: only 1 in the fridge. Stew has 3 in the freezer.",
+        "🚨 MAKE Dinner: none left!",
+        "⚠️ MAKE Breakfast: 1 left",
+        "🧊 THAW Breakfast: Oats",
+        "🧊 THAW Snack: Stew",
     ]
     assert "Lunch" not in "\n".join(actions)
 
     # The Stock page shows the same to-do list.
     page = client.get("/").data.decode()
-    assert "To do today" in page and "THAW Snack: only 1 in the fridge." in page
+    assert "To do today" in page and "THAW Snack: Stew" in page
 
 
 def test_report_nothing_to_do(client, app):
@@ -382,9 +382,12 @@ def test_send_to_phone_button(client, ntfy):
     resp = client.post("/report/test", follow_redirects=True)
     assert b"Sent today&#39;s report to your phone" in resp.data
     (msg,) = ntfy.sent
-    assert msg["topic"] == "test-topic" and msg["title"].startswith("Thomas's meals for ")
-    assert "MAKE MORE Dinner: none left!" in msg["message"]
-    assert not msg["message"].startswith("Thomas")  # title isn't repeated in the body
+    assert msg["topic"] == "test-topic" and msg["title"].startswith("Thomas's meals · ")
+    # Only the to-dos: no stock counts, so it fits on the lock screen.
+    assert msg["message"].splitlines() == [
+        "🚨 MAKE Breakfast: none left!", "🚨 MAKE Lunch: none left!",
+        "🚨 MAKE Snack: none left!", "🚨 MAKE Dinner: none left!",
+    ]
     assert msg["priority"] == 4 and msg["tags"] == ["rotating_light"]
     assert msg["click"] == "https://example.test"
 

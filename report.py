@@ -39,14 +39,13 @@ def build_report(db, today):
     for cat in categories.values():
         name = cat["name"]
         if cat["total"] == 0:
-            urgent.append(f"MAKE MORE {name}: none left!")
+            urgent.append(f"MAKE {name}: none left!")
         elif cat["total"] == 1:
-            make.append(f"MAKE MORE {name}: only 1 left.")
+            make.append(f"MAKE {name}: 1 left")
         if cat["fridge"] <= 1 and cat["freezer"] > 0:
             # Suggest the recipe with the most in the freezer.
-            recipe, count = max(cat["freezer_by_recipe"].items(), key=lambda kv: (kv[1], kv[0]))
-            in_fridge = "nothing" if cat["fridge"] == 0 else "only 1"
-            thaw.append(f"THAW {name}: {in_fridge} in the fridge. {recipe} has {count} in the freezer.")
+            recipe = max(cat["freezer_by_recipe"].items(), key=lambda kv: (kv[1], kv[0]))[0]
+            thaw.append(f"THAW {name}: {recipe}")
 
     return {
         "date": today,
@@ -63,17 +62,20 @@ ICONS = {"urgent": "🚨", "make": "⚠️", "thaw": "🧊"}
 
 
 def format_title(report):
-    return f"Thomas's meals for {report['date'].strftime('%A, %b ')}{report['date'].day}"
+    return f"Thomas's meals · {report['date'].strftime('%a %b ')}{report['date'].day}"
 
 
-def format_text(report, include_title=True):
-    lines = [format_title(report), ""] if include_title else []
+def format_actions(report):
+    """Just the to-do lines: what the phone notification shows."""
+    if not report["actions"]:
+        return "✅ Nothing to do today."
+    return "\n".join(f"{ICONS[a['level']]} {a['text']}" for a in report["actions"])
+
+
+def format_text(report):
+    """Full plain-text report: title, stock per category, then the to-dos."""
+    lines = [format_title(report), ""]
     for cat in report["categories"]:
         detail = f" ({cat['fridge']} fridge, {cat['freezer']} freezer)" if cat["total"] else ""
         lines.append(f"{cat['name']}: {cat['total']}{detail}")
-    lines.append("")
-    if report["actions"]:
-        lines += [f"{ICONS[a['level']]} {a['text']}" for a in report["actions"]]
-    else:
-        lines.append("✅ Nothing to do today.")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n\n" + format_actions(report)
