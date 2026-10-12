@@ -9,6 +9,19 @@
   {% endfor %}
 </section>
 
+<section class="card todo">
+  <h2>To do today</h2>
+  {% if report.actions %}
+  <ul>
+    {% for a in report.actions %}
+    <li class="todo-{{ a.level }}">{{ a.text }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nothing to do today.</p>
+  {% endif %}
+</section>
+
 {% if grand_total %}
 <p class="hint">{{ grand_total }} meals in all. Tap a number to move or use those meals.</p>
 

@@ -306,3 +306,58 @@ def test_edit_recipe_ingredients(client):
     client.post(f"/recipes/{rid}/edit", data={"name": "Soup", "ingredients": "broth\ncarrots"})
     page = client.get(f"/recipes/{rid}").data.decode()
     assert "broth\ncarrots" in page and "Instructions" not in page
+
+
+def report_text(client):
+    resp = client.get("/report.txt")
+    assert resp.status_code == 200 and resp.mimetype == "text/plain"
+    return resp.data.decode()
+
+
+def test_report_when_empty(client):
+    text = report_text(client)
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+        assert f"{cat}: 0\n" in text
+        assert f"MAKE MORE {cat}: none left!" in text
+    assert "THAW" not in text
+
+
+def test_report_rules(client, app):
+    oats = add_recipe(client, "Oats")
+    soup = add_recipe(client, "Soup")
+    stew = add_recipe(client, "Stew")
+    # Breakfast: 1 meal, in the freezer -> make more (1 left) and thaw.
+    make_batch(client, app, oats, category="Breakfast", Freezer=1)
+    # Lunch: plenty in the fridge -> nothing.
+    make_batch(client, app, soup, category="Lunch", Thawing=1, Syringes=1, Freezer=3)
+    # Snack: 1 in the fridge, two recipes in the freezer -> thaw the one with more.
+    make_batch(client, app, soup, category="Snack", Syringes=1, Freezer=1)
+    make_batch(client, app, stew, category="Snack", Freezer=3)
+    # Dinner: nothing -> urgent.
+
+    text = report_text(client)
+    assert "Breakfast: 1 (0 fridge, 1 freezer)" in text
+    assert "Lunch: 5 (2 fridge, 3 freezer)" in text
+    assert "Snack: 5 (1 fridge, 4 freezer)" in text
+    assert "Dinner: 0\n" in text
+
+    actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠🧊"]
+    assert actions == [
+        "🚨 MAKE MORE Dinner: none left!",
+        "⚠️ MAKE MORE Breakfast: only 1 left.",
+        "🧊 THAW Breakfast: nothing in the fridge. Oats has 1 in the freezer.",
+        "🧊 THAW Snack: only 1 in the fridge. Stew has 3 in the freezer.",
+    ]
+    assert "Lunch" not in "\n".join(actions)
+
+    # The Stock page shows the same to-do list.
+    page = client.get("/").data.decode()
+    assert "To do today" in page and "THAW Snack: only 1 in the fridge." in page
+
+
+def test_report_nothing_to_do(client, app):
+    rid = add_recipe(client, "Soup")
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+        make_batch(client, app, rid, category=cat, Thawing=2, Freezer=2)
+    assert "✅ Nothing to do today." in report_text(client)
+    assert b"Nothing to do today." in client.get("/").data

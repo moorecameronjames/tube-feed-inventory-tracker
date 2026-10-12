@@ -17,6 +17,8 @@ from flask import (
 )
 from psycopg.rows import dict_row
 
+from report import build_report, format_text
+
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 KIND_LABELS = {"moved": "Moved", "used": "Used", "discarded": "Thrown out"}
@@ -215,7 +217,14 @@ def register_routes(app):
             locations=locations,
             sections=sections,
             grand_total=sum(s["total"] for s in sections),
+            report=build_report(db, today_local()),
         )
+
+    @app.get("/report.txt")
+    def report_text():
+        # Plain-text morning report, for the daily text/notification to send.
+        text = format_text(build_report(get_db(), today_local()))
+        return text, 200, {"Content-Type": "text/plain; charset=utf-8"}
 
     @app.route("/make", methods=["GET", "POST"])
     def make_batch():

@@ -188,3 +188,13 @@ a.stat { color: inherit; text-decoration: none; }
   background: var(--accent-soft); color: var(--text); vertical-align: 1px;
 }
 .choices.grid-2 { display: grid; grid-template-columns: 1fr 1fr; }
+
+/* To-do card (morning report) */
+.todo h2 { margin-bottom: 8px; }
+.todo p { margin: 0; }
+.todo ul { list-style: none; margin: 0; padding: 0; }
+.todo li { padding: 8px 10px 8px 12px; border-radius: 8px; margin-bottom: 6px; border-left: 4px solid; }
+.todo li:last-child { margin-bottom: 0; }
+.todo li.todo-urgent { background: var(--error-bg); color: var(--error-text); border-color: #d64545; font-weight: 600; }
+.todo li.todo-make { background: var(--highlight-soft); border-color: var(--highlight); }
+.todo li.todo-thaw { background: var(--accent-soft); border-color: #5aa9c2; }
