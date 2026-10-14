@@ -519,17 +519,25 @@ def register_routes(app):
             {"recipe_id": recipe["id"] if recipe else None},
         ).fetchall()
 
-        last_made = None
+        last_made = total_fed = None
         if recipe:
             last_made = db.execute(
                 "SELECT max(made_on) AS made_on FROM batches WHERE recipe_id = %s", (recipe["id"],)
             ).fetchone()["made_on"]
+            # Every syringe of this recipe used (fed), across all categories. Undone
+            # entries are deleted, so they drop out; thrown-out ones aren't counted.
+            total_fed = db.execute(
+                """SELECT COALESCE(SUM(quantity), 0) AS fed FROM movements
+                   WHERE recipe_id = %s AND kind = 'used'""",
+                (recipe["id"],),
+            ).fetchone()["fed"]
         return render_template(
             "history.html",
             movements=movements,
             recipes=recipes,
             recipe=recipe,
             last_made=last_made,
+            total_fed=total_fed,
             days_ago=(today_local() - last_made).days if last_made else None,
         )
 

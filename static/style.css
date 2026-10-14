@@ -234,3 +234,6 @@ button.fed-choice:active { background: var(--accent-soft); }
 .fed-count { margin-left: auto; color: var(--muted); font-size: 0.9rem; }
 .feed-count { margin: 0 0 4px; }
 .feed-count label { font-size: 1.3rem; font-weight: 700; padding: 12px; }
+.recipe-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
+.recipe-stats > div { text-align: center; }
+.recipe-stats .total-fed { border-left: 1px solid var(--border); }

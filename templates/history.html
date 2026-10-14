@@ -15,16 +15,23 @@
 </form>
 
 {% if recipe %}
-<div class="card last-made">
-  {% if last_made %}
-    <div class="small muted">Last made</div>
-    <div class="last-made-date">{{ last_made.strftime('%a, %b %d, %Y') }}</div>
-    <div class="small muted">
-      {% if days_ago == 0 %}today{% elif days_ago == 1 %}yesterday{% else %}{{ days_ago }} days ago{% endif %}
-    </div>
-  {% else %}
-    <div class="muted">{{ recipe.name }} hasn't been made yet.</div>
-  {% endif %}
+<div class="card recipe-stats">
+  <div class="last-made">
+    {% if last_made %}
+      <div class="small muted">Last made</div>
+      <div class="last-made-date">{{ last_made.strftime('%b %d, %Y') }}</div>
+      <div class="small muted">
+        {% if days_ago == 0 %}today{% elif days_ago == 1 %}yesterday{% else %}{{ days_ago }} days ago{% endif %}
+      </div>
+    {% else %}
+      <div class="muted">{{ recipe.name }} hasn't been made yet.</div>
+    {% endif %}
+  </div>
+  <div class="total-fed">
+    <div class="small muted">Fed to Thomas</div>
+    <div class="last-made-date">{{ total_fed }}</div>
+    <div class="small muted">syringe{{ '' if total_fed == 1 else 's' }} total</div>
+  </div>
 </div>
 {% endif %}
 

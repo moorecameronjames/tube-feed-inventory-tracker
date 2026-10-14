@@ -500,3 +500,39 @@ def test_feeding_time_one_or_two_syringes(client, app):
     resp = client.post("/fed", data={"count": "5", "meal": lunch}, follow_redirects=True)
     assert b"Pick 1 or 2 syringes." in resp.data
     assert stock(app, soup) == {"Syringes": 1, "Thawing": 2}
+
+
+def total_fed(client, recipe_id):
+    page = client.get(f"/history?recipe_id={recipe_id}").data.decode()
+    m = re.search(r'Fed to Thomas</div>\s*<div class="last-made-date">(\d+)</div>\s*<div class="small muted">(syringes?) total', page)
+    assert m, "total fed card missing"
+    return int(m.group(1)), m.group(2)
+
+
+def test_history_shows_total_fed_for_a_recipe(client, app):
+    soup = add_recipe(client, "Soup")
+    stew = add_recipe(client, "Stew")
+    lunch = category_ids(app)["Lunch"]
+    dinner = category_ids(app)["Dinner"]
+    make_batch(client, app, soup, category="Lunch", Syringes=5, Freezer=2)
+    make_batch(client, app, soup, category="Dinner", Syringes=3)
+    make_batch(client, app, stew, category="Dinner", Syringes=4)
+    assert total_fed(client, soup) == (0, "syringes")
+
+    client.post("/fed", data={"count": "2", "meal": f"{soup}:{lunch}"})   # 2 lunch
+    client.post("/fed", data={"count": "1", "meal": f"{soup}:{dinner}"})  # 1 dinner
+    move(client, app, soup, "used", 1, "Syringes", category="Lunch")       # 1 via Move / Use
+    move(client, app, soup, "discarded", 1, "Freezer", category="Lunch")   # thrown out: not fed
+    client.post("/fed", data={"count": "2", "meal": f"{stew}:{dinner}"})  # other recipe
+    assert total_fed(client, soup) == (4, "syringes")
+    assert total_fed(client, stew) == (2, "syringes")
+
+    # Undoing a feeding takes it back out of the total.
+    with psycopg.connect(app.config["DATABASE_URL"]) as conn:
+        last_soup_feed = conn.execute(
+            "SELECT max(id) FROM movements WHERE recipe_id = %s AND kind = 'used'", (soup,)).fetchone()[0]
+    client.post(f"/history/{last_soup_feed}/undo")
+    assert total_fed(client, soup) == (3, "syringes")
+
+    # Not shown on the unfiltered history.
+    assert "Fed to Thomas" not in client.get("/history").data.decode()
