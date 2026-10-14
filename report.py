@@ -5,13 +5,17 @@ short of two days' worth (fewer than LOW syringes) needs action today:
   - MAKE MORE when a category has fewer than LOW syringes in total; at 0 it's urgent.
   - THAW when a category has fewer than LOW syringes in the fridge (thawing + filled)
     and there are some in the freezer.
+Morning notification only (not the Stock page, which is checked all day):
+  - REPACKAGE anything still thawing into syringes.
 """
 
 FREEZER = "Freezer"
+THAWING = "Fridge (thawing)"
 LOW = 4  # two days' worth of syringes
 
 
-def build_report(db, today):
+def build_report(db, today, morning=False):
+    """`morning=True` adds the actions that only make sense first thing (REPACKAGE)."""
     rows = db.execute(
         """SELECT c.id AS category_id, c.name AS category, r.name AS recipe,
                   l.name AS location, s.quantity
@@ -25,7 +29,8 @@ def build_report(db, today):
     categories = {}
     for row in rows:
         cat = categories.setdefault(row["category_id"], {
-            "name": row["category"], "total": 0, "fridge": 0, "freezer": 0, "freezer_by_recipe": {},
+            "name": row["category"], "total": 0, "fridge": 0, "freezer": 0,
+            "freezer_by_recipe": {}, "thawing_by_recipe": {},
         })
         if row["quantity"] is None:
             continue
@@ -36,14 +41,19 @@ def build_report(db, today):
             by_recipe[row["recipe"]] = by_recipe.get(row["recipe"], 0) + row["quantity"]
         else:
             cat["fridge"] += row["quantity"]
+            if row["location"] == THAWING:
+                by_recipe = cat["thawing_by_recipe"]
+                by_recipe[row["recipe"]] = by_recipe.get(row["recipe"], 0) + row["quantity"]
 
-    urgent, make, thaw = [], [], []
+    urgent, make, repackage, thaw = [], [], [], []
     for cat in categories.values():
         name = cat["name"]
         if cat["total"] == 0:
             urgent.append(f"MAKE {name}: none left!")
         elif cat["total"] < LOW:
             make.append(f"MAKE {name}: {cat['total']} syringe{'' if cat['total'] == 1 else 's'} left")
+        if morning and cat["thawing_by_recipe"]:
+            repackage.append(f"REPACKAGE {name}: {', '.join(sorted(cat['thawing_by_recipe']))}")
         if cat["fridge"] < LOW and cat["freezer"] > 0:
             # Suggest the recipe with the most in the freezer.
             recipe = max(cat["freezer_by_recipe"].items(), key=lambda kv: (kv[1], kv[0]))[0]
@@ -55,12 +65,13 @@ def build_report(db, today):
         "actions": (
             [{"level": "urgent", "text": t} for t in urgent]
             + [{"level": "make", "text": t} for t in make]
+            + [{"level": "repackage", "text": t} for t in repackage]
             + [{"level": "thaw", "text": t} for t in thaw]
         ),
     }
 
 
-ICONS = {"urgent": "🚨", "make": "⚠️", "thaw": "🧊"}
+ICONS = {"urgent": "🚨", "make": "⚠️", "repackage": "💉", "thaw": "🧊"}
 
 
 def format_title(report):

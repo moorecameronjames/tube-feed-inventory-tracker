@@ -341,29 +341,30 @@ def test_report_rules(client, app):
     assert "Snack: 7 (3 fridge, 4 freezer)" in text
     assert "Dinner: 0\n" in text
 
-    actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠🧊"]
+    actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠💉🧊"]
     assert actions == [
         "🚨 MAKE Dinner: none left!",
         "⚠️ MAKE Breakfast: 1 syringe left",
+        "💉 REPACKAGE Lunch: Soup",  # morning report only
         "🧊 THAW Breakfast: Oats",
         "🧊 THAW Snack: Stew",
     ]
-    assert "Lunch" not in "\n".join(actions)
 
-    # The Stock page shows the same to-do list.
+    # The Stock page shows the same to-do list, minus the morning-only REPACKAGE.
     page = client.get("/").data.decode()
     assert "To do today" in page and "THAW Snack: Stew" in page
+    assert "REPACKAGE" not in page
 
 
 def test_report_flags_less_than_two_days(client, app):
     """Fewer than 4 syringes (two days' worth) gets flagged; exactly 4 doesn't."""
     soup = add_recipe(client, "Soup")
-    make_batch(client, app, soup, category="Breakfast", Thawing=4)            # 4: fine
-    make_batch(client, app, soup, category="Lunch", Thawing=3)                # 3: make more
-    make_batch(client, app, soup, category="Snack", Thawing=2, Syringes=1)    # 3: make more
+    make_batch(client, app, soup, category="Breakfast", Syringes=4)           # 4: fine
+    make_batch(client, app, soup, category="Lunch", Syringes=3)               # 3: make more
+    make_batch(client, app, soup, category="Snack", Syringes=3)               # 3: make more
     make_batch(client, app, soup, category="Dinner", Syringes=3, Freezer=5)   # fridge 3: thaw
 
-    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠🧊"]
+    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠💉🧊"]
     assert actions == [
         "⚠️ MAKE Lunch: 3 syringes left",
         "⚠️ MAKE Snack: 3 syringes left",
@@ -374,7 +375,7 @@ def test_report_flags_less_than_two_days(client, app):
 def test_report_nothing_to_do(client, app):
     rid = add_recipe(client, "Soup")
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
-        make_batch(client, app, rid, category=cat, Thawing=2, Syringes=2, Freezer=2)
+        make_batch(client, app, rid, category=cat, Syringes=4, Freezer=2)
     assert "✅ Nothing to do today." in report_text(client)
     assert b"Nothing to do today." in client.get("/").data
 
@@ -418,7 +419,7 @@ def test_report_not_due_without_topic(client, app):
 def test_quiet_priority_when_nothing_to_do(client, app, ntfy):
     rid = add_recipe(client, "Soup")
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
-        make_batch(client, app, rid, category=cat, Thawing=4)
+        make_batch(client, app, rid, category=cat, Syringes=4)
     app.config["REPORT_HOUR"] = 0
     payload = client.post("/report/due").json["payload"]
     assert payload["priority"] == 2 and payload["message"] == "✅ Nothing to do today."
@@ -536,3 +537,27 @@ def test_history_shows_total_fed_for_a_recipe(client, app):
 
     # Not shown on the unfiltered history.
     assert "Fed to Thomas" not in client.get("/history").data.decode()
+
+
+def test_repackage_anything_thawing_in_the_morning_only(client, app, ntfy):
+    soup = add_recipe(client, "Soup")
+    stew = add_recipe(client, "Stew")
+    # Plenty everywhere (nothing else to flag), but some left thawing.
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+        make_batch(client, app, soup, category=cat, Syringes=4, Freezer=2)
+    make_batch(client, app, soup, category="Snack", Thawing=1)
+    make_batch(client, app, stew, category="Snack", Thawing=2)
+    make_batch(client, app, stew, category="Dinner", Thawing=1)
+
+    app.config["REPORT_HOUR"] = 0
+    payload = client.post("/report/due").json["payload"]
+    assert payload["message"].splitlines() == [
+        "💉 REPACKAGE Snack: Soup, Stew",
+        "💉 REPACKAGE Dinner: Stew",
+    ]
+    assert payload["priority"] == 3  # something to do, nothing urgent
+    assert "💉 REPACKAGE Snack: Soup, Stew" in report_text(client)
+
+    # Viewing the app during the day doesn't flag it.
+    page = client.get("/").data.decode()
+    assert "REPACKAGE" not in page and "Nothing to do today." in page

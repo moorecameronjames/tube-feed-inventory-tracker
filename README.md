@@ -53,8 +53,9 @@ every change is logged in `movements`, and `batches` records each time a recipe 
 Each morning the app pushes a summary to the [ntfy](https://ntfy.sh) phone app:
 anything short of two days' worth (fewer than 4 syringes) gets flagged: MAKE MORE
 (fewer than 4 in a category; urgent at 0) and THAW (fewer than 4 in the fridge with
-some in the freezer). The same list shows on
-the Stock page, and `/report.txt` has the plain-text version.
+some in the freezer). The morning report also says to REPACKAGE anything still
+thawing into syringes. The same list shows on the Stock page (minus REPACKAGE, which
+is morning-only), and `/report.txt` has the plain-text version of the morning report.
 
 Setup:
 1. Install ntfy on each phone and subscribe to your topic name (treat it like a password).
