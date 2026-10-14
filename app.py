@@ -24,8 +24,13 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 KIND_LABELS = {"moved": "Moved", "used": "Used", "discarded": "Thrown out"}
 
 
+def syringes(n):
+    """Counts are in syringes of food: '1 syringe', '3 syringes'."""
+    return f"{n} syringe{'' if n == 1 else 's'}"
+
+
 class StockError(Exception):
-    """A change would leave a location with fewer than zero meals."""
+    """A change would leave a location with fewer than zero syringes."""
 
 
 def create_app(config=None):
@@ -101,7 +106,7 @@ def get_recipes(db, include_archived=False):
 
 
 def get_stock_map(db):
-    """{(recipe_id, category_id): {location_id: quantity}}, only for meals on hand."""
+    """{(recipe_id, category_id): {location_id: syringes}}, only for food on hand."""
     stock = {}
     for row in db.execute(
         "SELECT recipe_id, category_id, location_id, quantity FROM stock WHERE quantity > 0"
@@ -111,7 +116,7 @@ def get_stock_map(db):
 
 
 def recipe_totals(stock):
-    """{recipe_id: total meals across all categories and locations}"""
+    """{recipe_id: total syringes across all categories and locations}"""
     totals = {}
     for (recipe_id, _), counts in stock.items():
         totals[recipe_id] = totals.get(recipe_id, 0) + sum(counts.values())
@@ -135,7 +140,7 @@ def adjust_stock(db, recipe_id, category_id, location_id, delta):
                 key,
             ).fetchone() or {"recipe": "that recipe", "category": "that category", "location": "that spot"}
             raise StockError(
-                f"There {'is' if have == 1 else 'are'} only {have} {names['recipe']} "
+                f"There {'is' if have == 1 else 'are'} only {syringes(have)} of {names['recipe']} "
                 f"({names['category']}) in {names['location']}."
             )
         db.execute(
@@ -271,7 +276,7 @@ def register_routes(app):
 
     @app.route("/fed", methods=["GET", "POST"])
     def fed_meal():
-        """One-tap 'Thomas just had this': takes 1 meal out of the syringes."""
+        """One-tap 'Thomas just had this': uses 1 filled syringe."""
         db = get_db()
         syringes = db.execute("SELECT * FROM locations WHERE short_name = 'Syringes'").fetchone()
 
@@ -295,7 +300,7 @@ def register_routes(app):
                    WHERE r.id = %s""",
                 (category_id, syringes["id"], recipe_id),
             ).fetchone()
-            flash(f"Fed 1 {n['recipe']} ({n['category']}). {n['left']} left in syringes.", "success")
+            flash(f"Fed 1 syringe of {n['recipe']} ({n['category']}). {n['left']} filled left.", "success")
             return redirect(url_for("inventory"))
 
         meals = db.execute(
@@ -329,7 +334,7 @@ def register_routes(app):
                     for loc in locations
                 }
                 if sum(split.values()) == 0:
-                    raise ValueError("Enter how many meals went into at least one spot.")
+                    raise ValueError("Enter how many syringes went into at least one spot.")
             except ValueError as e:
                 flash(str(e), "error")
             else:
@@ -350,7 +355,7 @@ def register_routes(app):
                             )
                 name = next((r["name"] for r in recipes if r["id"] == recipe_id), "batch")
                 category = next(c["name"] for c in categories if c["id"] == category_id)
-                flash(f"Added {sum(split.values())} meals of {name} ({category}).", "success")
+                flash(f"Added {syringes(sum(split.values()))} of {name} ({category}).", "success")
                 return redirect(url_for("inventory"))
 
         return render_template(
@@ -379,7 +384,7 @@ def register_routes(app):
                 if kind not in KIND_LABELS:
                     raise ValueError("Pick what happened.")
                 recipe_id, category_id = parse_item(values.get("meal"))
-                quantity = parse_int(values.get("quantity"), "Number of meals", minimum=1)
+                quantity = parse_int(values.get("quantity"), "Number of syringes", minimum=1)
                 from_id = parse_int(values.get("from_location_id"), "From", minimum=1)
                 to_id = None
                 if kind == "moved":
@@ -469,7 +474,7 @@ def register_routes(app):
                ORDER BY b.made_on DESC, b.id DESC""",
             (recipe_id,),
         ).fetchall()
-        # Meals of this recipe on hand, summed across categories.
+        # Syringes of this recipe on hand, summed across categories.
         counts = {}
         for (r_id, _), locs in get_stock_map(db).items():
             if r_id == recipe_id:
@@ -531,7 +536,7 @@ def register_routes(app):
                 ).fetchone()
                 if m is None:
                     abort(404)
-                # Reverse the change: put meals back where they came from.
+                # Reverse the change: put the syringes back where they came from.
                 apply_movement(
                     db, m["recipe_id"], m["category_id"], m["to_location_id"], m["from_location_id"], m["quantity"]
                 )
@@ -543,7 +548,7 @@ def register_routes(app):
                         (m["batch_id"],),
                     )
         except StockError as e:
-            flash(f"Can't undo that: {e} Some of those meals have already been moved or used.", "error")
+            flash(f"Can't undo that: {e} Some of those syringes have already been moved or used.", "error")
         else:
             flash("Undone.", "success")
         # Stay on the same filtered view.
@@ -570,10 +575,10 @@ def describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id):
            WHERE r.id = %s""",
         (category_id, from_id, to_id, recipe_id),
     ).fetchone()
-    meals = f"{quantity} {n['recipe']} ({n['category']})"
+    what = f"{syringes(quantity)} of {n['recipe']} ({n['category']})"
     if kind == "moved":
-        return f"Moved {meals} from {n['from_name']} to {n['to_name']}."
-    return f"{KIND_LABELS[kind]}: {meals} from {n['from_name']}."
+        return f"Moved {what} from {n['from_name']} to {n['to_name']}."
+    return f"{KIND_LABELS[kind]}: {what} from {n['from_name']}."
 
 
 def load_recipe(recipe_id):

@@ -87,7 +87,7 @@ def test_healthz_is_public(app):
 def test_make_batch_splits_across_locations(client, app):
     rid = add_recipe(client)
     resp = make_batch(client, app, rid, Freezer=3, Thawing=3)
-    assert b"Added 6 meals of Chicken &amp; Rice (Lunch)" in resp.data
+    assert b"Added 6 syringes of Chicken &amp; Rice (Lunch)" in resp.data
     assert stock(app, rid) == {"Freezer": 3, "Thawing": 3}
     # Second batch adds on top.
     make_batch(client, app, rid, Freezer=2)
@@ -120,7 +120,7 @@ def test_same_recipe_in_two_categories(client, app):
     assert stock(app, rid, "Lunch") == {"Freezer": 3}
     assert stock(app, rid, "Dinner") == {}
     resp = move(client, app, rid, "used", 1, "Freezer", category="Dinner")
-    assert b"only 0 Soup (Dinner) in Freezer" in resp.data
+    assert b"only 0 syringes of Soup (Dinner) in Freezer" in resp.data
 
 
 def test_move_use_and_discard(client, app):
@@ -132,7 +132,7 @@ def test_move_use_and_discard(client, app):
 
     move(client, app, rid, "moved", 1, "Thawing", "Syringes")
     resp = move(client, app, rid, "used", 1, "Syringes", to="Freezer")  # "to" ignored when used
-    assert b"Used: 1 Chicken &amp; Rice (Lunch) from Fridge (in syringes)" in resp.data
+    assert b"Used: 1 syringe of Chicken &amp; Rice (Lunch) from Fridge (in syringes)" in resp.data
     move(client, app, rid, "discarded", 1, "Freezer")
     assert stock(app, rid) == {"Freezer": 1, "Thawing": 1}
 
@@ -141,7 +141,7 @@ def test_cannot_move_more_than_available(client, app):
     rid = add_recipe(client)
     make_batch(client, app, rid, Freezer=1)
     resp = move(client, app, rid, "used", 2, "Freezer")
-    assert b"only 1 Chicken &amp; Rice (Lunch) in Freezer" in resp.data
+    assert b"only 1 syringe of Chicken &amp; Rice (Lunch) in Freezer" in resp.data
     resp = move(client, app, rid, "used", 1, "Thawing")
     assert b"only 0" in resp.data
     assert stock(app, rid) == {"Freezer": 1}
@@ -162,7 +162,7 @@ def test_inventory_grouped_by_category(client, app):
 
     cards = re.findall(r'stat-number">(\d+)</div>\s*<div class="stat-label">(\w+)', page)
     assert {name: int(n) for n, name in cards} == {"Breakfast": 1, "Lunch": 0, "Snack": 0, "Dinner": 5}
-    assert "6 meals in all" in page
+    assert "6 syringes in all" in page
 
     dinner = page[page.index('id="cat-4"'):]
     assert "Beef Stew" in dinner and "Oats" not in dinner
@@ -344,7 +344,7 @@ def test_report_rules(client, app):
     actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠🧊"]
     assert actions == [
         "🚨 MAKE Dinner: none left!",
-        "⚠️ MAKE Breakfast: 1 left",
+        "⚠️ MAKE Breakfast: 1 syringe left",
         "🧊 THAW Breakfast: Oats",
         "🧊 THAW Snack: Stew",
     ]
@@ -417,11 +417,11 @@ def test_fed_a_meal_takes_one_from_syringes(client, app):
 
     page = client.get("/fed").data.decode()
     lunch_soup = f'value="{soup}:{category_ids(app)["Lunch"]}"'
-    assert lunch_soup in page and "2 in syringes" in page
+    assert lunch_soup in page and "2 filled" in page
     assert "Stew" not in page  # only meals that are in syringes
 
     resp = client.post("/fed", data={"meal": f"{soup}:{category_ids(app)['Lunch']}"}, follow_redirects=True)
-    assert b"Fed 1 Soup (Lunch). 1 left in syringes." in resp.data
+    assert b"Fed 1 syringe of Soup (Lunch). 1 filled left." in resp.data
     assert stock(app, soup, "Lunch") == {"Syringes": 1, "Freezer": 3}
     assert stock(app, soup, "Dinner") == {"Syringes": 1}
     assert 'Used</strong> 1 Soup <span class="tag">Lunch</span> from Syringes' in client.get("/history").data.decode()
@@ -430,10 +430,10 @@ def test_fed_a_meal_takes_one_from_syringes(client, app):
 def test_fed_a_meal_when_syringes_are_empty(client, app):
     soup = add_recipe(client, "Soup")
     make_batch(client, app, soup, category="Lunch", Freezer=2)
-    assert b"Nothing is in syringes right now." in client.get("/fed").data
+    assert b"No filled syringes right now." in client.get("/fed").data
     # A stale tap (e.g. from another phone) doesn't go negative.
     resp = client.post("/fed", data={"meal": f"{soup}:{category_ids(app)['Lunch']}"}, follow_redirects=True)
-    assert b"only 0 Soup (Lunch)" in resp.data
+    assert b"only 0 syringes of Soup (Lunch)" in resp.data
     assert stock(app, soup) == {"Freezer": 2}
 
 

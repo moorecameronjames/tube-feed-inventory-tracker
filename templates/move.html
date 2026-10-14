@@ -2,7 +2,7 @@
 {% block title %}Move or use · Thomas Tube Tracking{% endblock %}
 {% block content %}
 <div class="card">
-  <h1>Move or use meals</h1>
+  <h1>Move or use syringes</h1>
   {% if not groups %}
     <p>Nothing on hand to move yet.</p>
   {% else %}
@@ -43,7 +43,7 @@
       </select>
     </div>
 
-    <label for="quantity">How many meals?</label>
+    <label for="quantity">How many syringes?</label>
     <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1"
            value="{{ values.get('quantity', 1) }}" required>
     <p class="small" id="available"></p>

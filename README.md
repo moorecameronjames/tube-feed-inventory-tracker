@@ -2,12 +2,13 @@
 
 <img src="static/logo.svg" alt="Thomas Tube Tracking" width="320">
 
-Tracks home-made tube-feed recipes and how many meals of each are in the
+Tracks home-made tube-feed recipes and how many syringes of each are in the
 **Freezer**, **Fridge (thawing)**, and **Fridge (in syringes)**.
 
-- **Stock**: counts per recipe and location. Tap a number to move or use those meals.
+- **Stock**: syringes per recipe and location. Tap a number to move or use them.
 - **Made**: log a batch and split it across locations ("3 fridge, 3 freezer").
-- **Move / Use**: move meals between locations, mark them used, or throw them out.
+- **Feeding Time!**: one tap uses a filled syringe.
+- **Move / Use**: move syringes between locations, mark them used, or throw them out.
 - **Recipes**: ingredients and batch history.
 - **History**: every change, with undo.
 
@@ -50,7 +51,7 @@ every change is logged in `movements`, and `batches` records each time a recipe 
 ## Morning report
 
 Each morning the app pushes a summary to the [ntfy](https://ntfy.sh) phone app:
-meals left per category, plus MAKE MORE (1 left; urgent at 0) and THAW
+MAKE MORE (1 syringe left in a category; urgent at 0) and THAW
 (1 or fewer in the fridge with some in the freezer). The same list shows on
 the Stock page, and `/report.txt` has the plain-text version.
 

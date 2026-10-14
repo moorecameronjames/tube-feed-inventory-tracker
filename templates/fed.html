@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Feeding Time!</h1>
 {% if meals %}
-<p class="hint">Tap the meal Thomas just had. One comes out of the syringes.</p>
+<p class="hint">Tap what Thomas just had. One filled syringe gets used.</p>
 <div class="fed-list">
   {% for m in meals %}
   <form method="post">
@@ -11,14 +11,14 @@
     <button type="submit" class="fed-choice">
       <span class="fed-name">{{ m.recipe }}</span>
       <span class="tag">{{ m.category }}</span>
-      <span class="fed-count">{{ m.quantity }} in syringes</span>
+      <span class="fed-count">{{ m.quantity }} filled</span>
     </button>
   </form>
   {% endfor %}
 </div>
 {% else %}
 <div class="card empty">
-  <p>Nothing is in syringes right now.</p>
+  <p>No filled syringes right now.</p>
   <p><a class="button" href="{{ url_for('move') }}">Fill syringes</a></p>
 </div>
 {% endif %}

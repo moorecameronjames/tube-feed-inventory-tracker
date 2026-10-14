@@ -29,7 +29,7 @@
     <input id="made_on" name="made_on" type="date" value="{{ form.get('made_on', today) }}" required>
 
     <fieldset>
-      <legend>How many meals went where?</legend>
+      <legend>How many syringes went where?</legend>
       {% for loc in locations %}
       <div class="split-row">
         <label for="qty_{{ loc.id }}">{{ loc.name }}</label>

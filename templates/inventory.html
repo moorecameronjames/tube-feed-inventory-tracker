@@ -25,13 +25,13 @@
 </section>
 
 {% if grand_total %}
-<p class="hint">{{ grand_total }} meals in all. Tap a number to move or use those meals.</p>
+<p class="hint">{{ grand_total }} syringe{{ '' if grand_total == 1 else 's' }} in all. Tap a number to move or use them.</p>
 
 {% for s in sections %}
 <section class="category" id="cat-{{ s.category.id }}">
   <div class="category-head">
     <h2>{{ s.category.name }}</h2>
-    <span class="badge">{{ s.total }} meal{{ '' if s.total == 1 else 's' }}</span>
+    <span class="badge">{{ s.total }} syringe{{ '' if s.total == 1 else 's' }}</span>
   </div>
   {% if s.rows %}
   <div class="table-wrap">
@@ -69,7 +69,7 @@
 
 {% else %}
 <div class="card empty">
-  <p>No meals tracked yet.</p>
+  <p>Nothing tracked yet.</p>
   <p><a class="button" href="{{ url_for('make_batch') }}">Log a batch</a></p>
 </div>
 {% endif %}

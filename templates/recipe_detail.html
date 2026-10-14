@@ -32,7 +32,7 @@
     {% for b in batches %}
     <li>
       <span>{{ b.made_on.strftime('%b %d, %Y') }} <span class="tag">{{ b.category }}</span>{% if b.notes %} · <span class="muted">{{ b.notes }}</span>{% endif %}</span>
-      <span class="badge">{{ b.meals }} meals</span>
+      <span class="badge">{{ b.meals }} syringe{{ '' if b.meals == 1 else 's' }}</span>
     </li>
     {% endfor %}
   </ul>

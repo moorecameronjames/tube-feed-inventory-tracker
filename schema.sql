@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS batches (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Current number of meals of each recipe + category in each location.
+-- Current number of syringes of each recipe + category in each location.
 CREATE TABLE IF NOT EXISTS stock (
     recipe_id    INT NOT NULL REFERENCES recipes(id),
     category_id  INT NOT NULL REFERENCES categories(id),
