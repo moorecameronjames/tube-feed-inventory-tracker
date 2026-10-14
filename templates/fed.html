@@ -3,19 +3,25 @@
 {% block content %}
 <h1>Feeding Time!</h1>
 {% if meals %}
-<p class="hint">Tap what Thomas just had. One filled syringe gets used.</p>
-<div class="fed-list">
-  {% for m in meals %}
-  <form method="post">
-    <input type="hidden" name="meal" value="{{ m.recipe_id }}:{{ m.category_id }}">
-    <button type="submit" class="fed-choice">
+<form method="post">
+  <fieldset class="choices feed-count">
+    <legend>How many syringes?</legend>
+    {% for n in counts %}
+    <label><input type="radio" name="count" value="{{ n }}" {{ 'checked' if loop.first }}> {{ n }}</label>
+    {% endfor %}
+  </fieldset>
+
+  <p class="hint">Then tap what Thomas had.</p>
+  <div class="fed-list">
+    {% for m in meals %}
+    <button type="submit" name="meal" value="{{ m.recipe_id }}:{{ m.category_id }}" class="fed-choice">
       <span class="fed-name">{{ m.recipe }}</span>
       <span class="tag">{{ m.category }}</span>
       <span class="fed-count">{{ m.quantity }} filled</span>
     </button>
-  </form>
-  {% endfor %}
-</div>
+    {% endfor %}
+  </div>
+</form>
 {% else %}
 <div class="card empty">
   <p>No filled syringes right now.</p>

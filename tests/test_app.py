@@ -475,3 +475,28 @@ def test_test_report_always_due_and_does_not_block_the_real_one(client, app, ntf
     with psycopg.connect(app.config["DATABASE_URL"], autocommit=True) as conn:
         conn.execute("DELETE FROM app_state")
     assert not client.post("/report/due").json["payload"]["title"].endswith("(test)")
+
+
+def test_feeding_time_one_or_two_syringes(client, app):
+    soup = add_recipe(client, "Soup")
+    lunch = f"{soup}:{category_ids(app)['Lunch']}"
+    make_batch(client, app, soup, category="Lunch", Syringes=3, Thawing=2)
+
+    page = client.get("/fed").data.decode()
+    assert 'name="count" value="1" checked' in page and 'name="count" value="2"' in page
+    assert f'name="meal" value="{lunch}"' in page
+
+    resp = client.post("/fed", data={"count": "2", "meal": lunch}, follow_redirects=True)
+    assert b"Fed 2 syringes of Soup (Lunch). 1 filled left." in resp.data
+    assert stock(app, soup) == {"Syringes": 1, "Thawing": 2}  # only from the filled syringes
+    assert 'Used</strong> 2 Soup' in client.get("/history").data.decode()
+
+    # Asking for 2 when only 1 is filled doesn't go negative.
+    resp = client.post("/fed", data={"count": "2", "meal": lunch}, follow_redirects=True)
+    assert b"only 1 syringe of Soup (Lunch)" in resp.data
+    assert stock(app, soup) == {"Syringes": 1, "Thawing": 2}
+
+    # Only 1 or 2.
+    resp = client.post("/fed", data={"count": "5", "meal": lunch}, follow_redirects=True)
+    assert b"Pick 1 or 2 syringes." in resp.data
+    assert stock(app, soup) == {"Syringes": 1, "Thawing": 2}

@@ -21,6 +21,8 @@ from report import build_report, format_actions, format_text, format_title
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
+FEED_COUNTS = ("1", "2")  # syringes per feeding, chosen on Feeding Time!
+
 KIND_LABELS = {"moved": "Moved", "used": "Used", "discarded": "Thrown out"}
 
 
@@ -276,19 +278,24 @@ def register_routes(app):
 
     @app.route("/fed", methods=["GET", "POST"])
     def fed_meal():
-        """One-tap 'Thomas just had this': uses 1 filled syringe."""
+        """'Thomas just had this': pick 1 or 2 syringes, then tap the meal. Uses that
+        many from Fridge (in syringes)."""
         db = get_db()
-        syringes = db.execute("SELECT * FROM locations WHERE short_name = 'Syringes'").fetchone()
+        filled = db.execute("SELECT * FROM locations WHERE short_name = 'Syringes'").fetchone()
 
         if request.method == "POST":
             try:
+                count = request.form.get("count", "1")
+                if count not in FEED_COUNTS:
+                    raise ValueError("Pick 1 or 2 syringes.")
+                count = int(count)
                 recipe_id, category_id = parse_item(request.form.get("meal"))
                 with db.transaction():
-                    apply_movement(db, recipe_id, category_id, syringes["id"], None, 1)
+                    apply_movement(db, recipe_id, category_id, filled["id"], None, count)
                     db.execute(
                         """INSERT INTO movements (recipe_id, category_id, kind, from_location_id, quantity)
-                           VALUES (%s, %s, 'used', %s, 1)""",
-                        (recipe_id, category_id, syringes["id"]),
+                           VALUES (%s, %s, 'used', %s, %s)""",
+                        (recipe_id, category_id, filled["id"], count),
                     )
             except (ValueError, StockError) as e:
                 flash(str(e), "error")
@@ -298,9 +305,9 @@ def register_routes(app):
                    FROM recipes r JOIN categories c ON c.id = %s
                    LEFT JOIN stock s ON s.recipe_id = r.id AND s.category_id = c.id AND s.location_id = %s
                    WHERE r.id = %s""",
-                (category_id, syringes["id"], recipe_id),
+                (category_id, filled["id"], recipe_id),
             ).fetchone()
-            flash(f"Fed 1 syringe of {n['recipe']} ({n['category']}). {n['left']} filled left.", "success")
+            flash(f"Fed {syringes(count)} of {n['recipe']} ({n['category']}). {n['left']} filled left.", "success")
             return redirect(url_for("inventory"))
 
         meals = db.execute(
@@ -310,9 +317,9 @@ def register_routes(app):
                JOIN categories c ON c.id = s.category_id
                WHERE s.location_id = %s AND s.quantity > 0
                ORDER BY c.sort_order, lower(r.name)""",
-            (syringes["id"],),
+            (filled["id"],),
         ).fetchall()
-        return render_template("fed.html", meals=meals)
+        return render_template("fed.html", meals=meals, counts=FEED_COUNTS)
 
     @app.route("/make", methods=["GET", "POST"])
     def make_batch():

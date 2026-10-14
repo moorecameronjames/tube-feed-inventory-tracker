@@ -224,7 +224,6 @@ a.stat { color: inherit; text-decoration: none; }
   font-size: 1.15rem; background: var(--highlight); color: #ffffff;
 }
 .fed-list { display: grid; gap: 10px; }
-.fed-list form { margin: 0; }
 button.fed-choice {
   width: 100%; margin: 0; padding: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   text-align: left; background: var(--card); color: var(--text); border: 1px solid var(--border);
@@ -233,3 +232,5 @@ button.fed-choice {
 button.fed-choice:active { background: var(--accent-soft); }
 .fed-name { font-weight: 700; font-size: 1.1rem; }
 .fed-count { margin-left: auto; color: var(--muted); font-size: 0.9rem; }
+.feed-count { margin: 0 0 4px; }
+.feed-count label { font-size: 1.3rem; font-weight: 700; padding: 12px; }
