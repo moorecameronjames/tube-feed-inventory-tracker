@@ -77,13 +77,16 @@ def format_title(report):
 
 def format_actions(report):
     """What the phone notification shows: MAKE/THAW to-dos first (so they fit on the
-    lock screen), then a last line about anything still thawing."""
+    lock screen), or the all-clear if there are none, then a last line about anything
+    still thawing (left out when nothing is)."""
     lines = [f"{ICONS[a['level']]} {a['text']}" for a in report["actions"]]
+    if not lines:
+        lines = ["✅ Nothing to do today."]
     n = report["thawing"]
     if n:
         lines.append(f"There {'is' if n == 1 else 'are'} {n} syringe{'' if n == 1 else 's'} "
                      f"worth of food thawing")
-    return "\n".join(lines) or "✅ Nothing to do today."
+    return "\n".join(lines)
 
 
 def format_text(report):

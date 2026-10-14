@@ -637,9 +637,7 @@ def notification_payload(db):
     """Today's report as an ntfy JSON message: just the to-dos, so it fits on the lock screen."""
     config = current_app.config
     report = build_report(db, today_local())
-    levels = {a["level"] for a in report["actions"]}
-    if report["thawing"]:
-        levels.add("thawing")  # still something to do this morning
+    levels = {a["level"] for a in report["actions"]}  # thawing alone is still an all-clear
     # No ntfy tags: the app shows them as emoji in front of the title.
     priority = 4 if "urgent" in levels else 3 if levels else 2
     payload = {

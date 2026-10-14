@@ -550,8 +550,9 @@ def test_thawing_line_in_the_morning_only(client, app, ntfy):
 
     app.config["REPORT_HOUR"] = 0
     payload = client.post("/report/due").json["payload"]
-    assert payload["message"] == "There are 3 syringes worth of food thawing"
-    assert payload["priority"] == 3  # something to do, nothing urgent
+    # Nothing is needed, so it's still the all-clear (quiet priority), plus the count.
+    assert payload["message"] == "✅ Nothing to do today.\nThere are 3 syringes worth of food thawing"
+    assert payload["priority"] == 2
     # The on-demand Test report workflow sends the same thing.
     test_payload = client.post("/report/due?test=1").json["payload"]
     assert test_payload["message"] == payload["message"] and test_payload["title"].endswith(" (test)")
