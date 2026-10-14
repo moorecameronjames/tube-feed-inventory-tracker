@@ -347,13 +347,13 @@ def test_report_rules(client, app):
         "⚠️ MAKE Breakfast: 1 syringe left",
         "🧊 THAW Breakfast: Oats",
         "🧊 THAW Snack: Stew",
-        "There are 2 syringes worth of food thawing",
+        "2 syringes currently thawing",
     ]
 
     # The Stock page shows the same to-dos, without the morning-only thawing line.
     page = client.get("/").data.decode()
     assert "To do today" in page and "THAW Snack: Stew" in page
-    assert "worth of food thawing" not in page
+    assert "currently thawing" not in page
 
 
 def test_report_flags_less_than_two_days(client, app):
@@ -551,16 +551,16 @@ def test_thawing_line_in_the_morning_only(client, app, ntfy):
     app.config["REPORT_HOUR"] = 0
     payload = client.post("/report/due").json["payload"]
     # Nothing is needed, so it's still the all-clear (quiet priority), plus the count.
-    assert payload["message"] == "✅ Nothing to do today.\nThere are 3 syringes worth of food thawing"
+    assert payload["message"] == "✅ Nothing to do today.\n3 syringes currently thawing"
     assert payload["priority"] == 2
     # The on-demand Test report workflow sends the same thing.
     test_payload = client.post("/report/due?test=1").json["payload"]
     assert test_payload["message"] == payload["message"] and test_payload["title"].endswith(" (test)")
-    assert report_text(client).endswith("There are 3 syringes worth of food thawing")
+    assert report_text(client).endswith("3 syringes currently thawing")
 
     # Viewing the app during the day doesn't flag it.
     page = client.get("/").data.decode()
-    assert "worth of food thawing" not in page and "Nothing to do today." in page
+    assert "currently thawing" not in page and "Nothing to do today." in page
 
 
 def test_thawing_line_comes_after_make_and_thaw(client, app, ntfy):
@@ -568,5 +568,5 @@ def test_thawing_line_comes_after_make_and_thaw(client, app, ntfy):
     make_batch(client, app, soup, category="Lunch", Thawing=1)  # 1 total: make; 1 thawing
     app.config["REPORT_HOUR"] = 0
     lines = client.post("/report/due").json["payload"]["message"].splitlines()
-    assert lines[-2:] == ["⚠️ MAKE Lunch: 1 syringe left", "There is 1 syringe worth of food thawing"]
+    assert lines[-2:] == ["⚠️ MAKE Lunch: 1 syringe left", "1 syringe currently thawing"]
     assert all(line.startswith("🚨") for line in lines[:-2])  # breakfast, snack, dinner are out

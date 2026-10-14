@@ -84,8 +84,7 @@ def format_actions(report):
         lines = ["✅ Nothing to do today."]
     n = report["thawing"]
     if n:
-        lines.append(f"There {'is' if n == 1 else 'are'} {n} syringe{'' if n == 1 else 's'} "
-                     f"worth of food thawing")
+        lines.append(f"{n} syringe{'' if n == 1 else 's'} currently thawing")
     return "\n".join(lines)
 
 
