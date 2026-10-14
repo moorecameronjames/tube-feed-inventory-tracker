@@ -237,7 +237,7 @@ def register_routes(app):
     @app.get("/report.txt")
     def report_text():
         # Plain-text morning report, for the daily text/notification to send.
-        text = format_text(build_report(get_db(), today_local(), morning=True))
+        text = format_text(build_report(get_db(), today_local()))
         return text, 200, {"Content-Type": "text/plain; charset=utf-8"}
 
     @app.post("/report/due")
@@ -636,8 +636,10 @@ def get_state(db, key):
 def notification_payload(db):
     """Today's report as an ntfy JSON message: just the to-dos, so it fits on the lock screen."""
     config = current_app.config
-    report = build_report(db, today_local(), morning=True)
+    report = build_report(db, today_local())
     levels = {a["level"] for a in report["actions"]}
+    if report["thawing"]:
+        levels.add("thawing")  # still something to do this morning
     # No ntfy tags: the app shows them as emoji in front of the title.
     priority = 4 if "urgent" in levels else 3 if levels else 2
     payload = {

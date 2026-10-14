@@ -341,19 +341,19 @@ def test_report_rules(client, app):
     assert "Snack: 7 (3 fridge, 4 freezer)" in text
     assert "Dinner: 0\n" in text
 
-    actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠💉🧊"]
-    assert actions == [
+    # MAKE/THAW first, then the thawing line last (Lunch has 2 thawing).
+    assert text.split("\n\n")[-1].splitlines() == [
         "🚨 MAKE Dinner: none left!",
         "⚠️ MAKE Breakfast: 1 syringe left",
-        "💉 REPACKAGE Lunch: Soup",  # morning report only
         "🧊 THAW Breakfast: Oats",
         "🧊 THAW Snack: Stew",
+        "There are 2 syringes worth of food thawing",
     ]
 
-    # The Stock page shows the same to-do list, minus the morning-only REPACKAGE.
+    # The Stock page shows the same to-dos, without the morning-only thawing line.
     page = client.get("/").data.decode()
     assert "To do today" in page and "THAW Snack: Stew" in page
-    assert "REPACKAGE" not in page
+    assert "worth of food thawing" not in page
 
 
 def test_report_flags_less_than_two_days(client, app):
@@ -364,7 +364,7 @@ def test_report_flags_less_than_two_days(client, app):
     make_batch(client, app, soup, category="Snack", Syringes=3)               # 3: make more
     make_batch(client, app, soup, category="Dinner", Syringes=3, Freezer=5)   # fridge 3: thaw
 
-    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠💉🧊"]
+    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠🧊"]
     assert actions == [
         "⚠️ MAKE Lunch: 3 syringes left",
         "⚠️ MAKE Snack: 3 syringes left",
@@ -539,25 +539,33 @@ def test_history_shows_total_fed_for_a_recipe(client, app):
     assert "Fed to Thomas" not in client.get("/history").data.decode()
 
 
-def test_repackage_anything_thawing_in_the_morning_only(client, app, ntfy):
+def test_thawing_line_in_the_morning_only(client, app, ntfy):
     soup = add_recipe(client, "Soup")
     stew = add_recipe(client, "Stew")
-    # Plenty everywhere (nothing else to flag), but some left thawing.
+    # Plenty everywhere (nothing to make or thaw), but some left thawing.
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
         make_batch(client, app, soup, category=cat, Syringes=4, Freezer=2)
     make_batch(client, app, soup, category="Snack", Thawing=1)
-    make_batch(client, app, stew, category="Snack", Thawing=2)
-    make_batch(client, app, stew, category="Dinner", Thawing=1)
+    make_batch(client, app, stew, category="Dinner", Thawing=2)
 
     app.config["REPORT_HOUR"] = 0
     payload = client.post("/report/due").json["payload"]
-    assert payload["message"].splitlines() == [
-        "💉 REPACKAGE Snack: Soup, Stew",
-        "💉 REPACKAGE Dinner: Stew",
-    ]
+    assert payload["message"] == "There are 3 syringes worth of food thawing"
     assert payload["priority"] == 3  # something to do, nothing urgent
-    assert "💉 REPACKAGE Snack: Soup, Stew" in report_text(client)
+    # The on-demand Test report workflow sends the same thing.
+    test_payload = client.post("/report/due?test=1").json["payload"]
+    assert test_payload["message"] == payload["message"] and test_payload["title"].endswith(" (test)")
+    assert report_text(client).endswith("There are 3 syringes worth of food thawing")
 
     # Viewing the app during the day doesn't flag it.
     page = client.get("/").data.decode()
-    assert "REPACKAGE" not in page and "Nothing to do today." in page
+    assert "worth of food thawing" not in page and "Nothing to do today." in page
+
+
+def test_thawing_line_comes_after_make_and_thaw(client, app, ntfy):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Thawing=1)  # 1 total: make; 1 thawing
+    app.config["REPORT_HOUR"] = 0
+    lines = client.post("/report/due").json["payload"]["message"].splitlines()
+    assert lines[-2:] == ["⚠️ MAKE Lunch: 1 syringe left", "There is 1 syringe worth of food thawing"]
+    assert all(line.startswith("🚨") for line in lines[:-2])  # breakfast, snack, dinner are out
