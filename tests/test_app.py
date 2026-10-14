@@ -326,19 +326,19 @@ def test_report_rules(client, app):
     oats = add_recipe(client, "Oats")
     soup = add_recipe(client, "Soup")
     stew = add_recipe(client, "Stew")
-    # Breakfast: 1 meal, in the freezer -> make more (1 left) and thaw.
+    # Breakfast: 1 syringe, in the freezer -> make more and thaw.
     make_batch(client, app, oats, category="Breakfast", Freezer=1)
-    # Lunch: plenty in the fridge -> nothing.
-    make_batch(client, app, soup, category="Lunch", Thawing=1, Syringes=1, Freezer=3)
-    # Snack: 1 in the fridge, two recipes in the freezer -> thaw the one with more.
-    make_batch(client, app, soup, category="Snack", Syringes=1, Freezer=1)
+    # Lunch: 7 total, exactly 4 in the fridge (two days) -> nothing.
+    make_batch(client, app, soup, category="Lunch", Thawing=2, Syringes=2, Freezer=3)
+    # Snack: 7 total but only 3 in the fridge; two recipes in the freezer -> thaw the one with more.
+    make_batch(client, app, soup, category="Snack", Syringes=3, Freezer=1)
     make_batch(client, app, stew, category="Snack", Freezer=3)
     # Dinner: nothing -> urgent.
 
     text = report_text(client)
     assert "Breakfast: 1 (0 fridge, 1 freezer)" in text
-    assert "Lunch: 5 (2 fridge, 3 freezer)" in text
-    assert "Snack: 5 (1 fridge, 4 freezer)" in text
+    assert "Lunch: 7 (4 fridge, 3 freezer)" in text
+    assert "Snack: 7 (3 fridge, 4 freezer)" in text
     assert "Dinner: 0\n" in text
 
     actions = [line for line in text.splitlines() if line and line[0] in "🚨⚠🧊"]
@@ -355,10 +355,26 @@ def test_report_rules(client, app):
     assert "To do today" in page and "THAW Snack: Stew" in page
 
 
+def test_report_flags_less_than_two_days(client, app):
+    """Fewer than 4 syringes (two days' worth) gets flagged; exactly 4 doesn't."""
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Breakfast", Thawing=4)            # 4: fine
+    make_batch(client, app, soup, category="Lunch", Thawing=3)                # 3: make more
+    make_batch(client, app, soup, category="Snack", Thawing=2, Syringes=1)    # 3: make more
+    make_batch(client, app, soup, category="Dinner", Syringes=3, Freezer=5)   # fridge 3: thaw
+
+    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠🧊"]
+    assert actions == [
+        "⚠️ MAKE Lunch: 3 syringes left",
+        "⚠️ MAKE Snack: 3 syringes left",
+        "🧊 THAW Dinner: Soup",
+    ]
+
+
 def test_report_nothing_to_do(client, app):
     rid = add_recipe(client, "Soup")
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
-        make_batch(client, app, rid, category=cat, Thawing=2, Freezer=2)
+        make_batch(client, app, rid, category=cat, Thawing=2, Syringes=2, Freezer=2)
     assert "✅ Nothing to do today." in report_text(client)
     assert b"Nothing to do today." in client.get("/").data
 
@@ -402,7 +418,7 @@ def test_report_not_due_without_topic(client, app):
 def test_quiet_priority_when_nothing_to_do(client, app, ntfy):
     rid = add_recipe(client, "Soup")
     for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
-        make_batch(client, app, rid, category=cat, Thawing=2, Freezer=2)
+        make_batch(client, app, rid, category=cat, Thawing=4)
     app.config["REPORT_HOUR"] = 0
     payload = client.post("/report/due").json["payload"]
     assert payload["priority"] == 2 and payload["message"] == "✅ Nothing to do today."

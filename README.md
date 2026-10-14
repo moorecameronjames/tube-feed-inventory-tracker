@@ -51,8 +51,9 @@ every change is logged in `movements`, and `batches` records each time a recipe 
 ## Morning report
 
 Each morning the app pushes a summary to the [ntfy](https://ntfy.sh) phone app:
-MAKE MORE (1 syringe left in a category; urgent at 0) and THAW
-(1 or fewer in the fridge with some in the freezer). The same list shows on
+anything short of two days' worth (fewer than 4 syringes) gets flagged: MAKE MORE
+(fewer than 4 in a category; urgent at 0) and THAW (fewer than 4 in the fridge with
+some in the freezer). The same list shows on
 the Stock page, and `/report.txt` has the plain-text version.
 
 Setup:
