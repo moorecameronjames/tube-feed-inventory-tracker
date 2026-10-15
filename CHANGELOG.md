@@ -2,6 +2,14 @@
 
 All notable changes to Thomas Tube Tracking.
 
+## 1.2 (unreleased)
+
+### Changed
+- **Move / Use** defaults to the next stage: from Freezer, To is Fridge (thawing); from
+  Fridge (thawing), To is Fridge (in syringes); from Fridge (in syringes), "What
+  happened?" is Used (fed). Both can still be changed. Previously, To often stayed on
+  Freezer.
+
 ## 1.1 (2026-10-14)
 
 Tweaks from the first two days of real use.

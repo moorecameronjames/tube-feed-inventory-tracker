@@ -570,3 +570,27 @@ def test_thawing_line_comes_after_make_and_thaw(client, app, ntfy):
     lines = client.post("/report/due").json["payload"]["message"].splitlines()
     assert lines[-2:] == ["⚠️ MAKE Lunch: 1 syringe left", "1 syringe currently thawing"]
     assert all(line.startswith("🚨") for line in lines[:-2])  # breakfast, snack, dinner are out
+
+
+def test_move_form_defaults_to_the_next_stage(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=2, Thawing=2, Syringes=2)
+    locs = location_ids(app)
+    meal = f"recipe_id={soup}&category_id={category_ids(app)['Lunch']}"
+
+    def form(from_name):
+        page = client.get(f"/move?{meal}&from_location_id={locs[from_name]}").data.decode()
+        to = re.search(r'<select id="to_location_id".*?</select>', page, re.S).group(0)
+        to_selected = re.search(r'<option value="(\d+)" selected', to)
+        kind = re.search(r'name="kind" value="(\w+)" checked', page).group(1)
+        return (to_selected and int(to_selected.group(1))), kind
+
+    assert form("Freezer") == (locs["Thawing"], "moved")
+    assert form("Thawing") == (locs["Syringes"], "moved")
+    assert form("Syringes")[1] == "used"  # next stage is being fed
+
+    # An explicit choice still wins (e.g. after a form error).
+    page = client.get(f"/move?{meal}&from_location_id={locs['Thawing']}"
+                      f"&to_location_id={locs['Freezer']}&kind=discarded").data.decode()
+    assert f'<option value="{locs["Freezer"]}" selected>Freezer' in page.split('id="to_location_id"')[1]
+    assert 'name="kind" value="discarded" checked' in page

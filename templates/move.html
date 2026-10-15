@@ -6,7 +6,6 @@
   {% if not groups %}
     <p>Nothing on hand to move yet.</p>
   {% else %}
-  {% set kind = values.get('kind', 'moved') %}
   <form method="post" id="move-form">
     <fieldset class="choices">
       <legend>What happened?</legend>
@@ -30,7 +29,7 @@
     <label for="from_location_id">From</label>
     <select id="from_location_id" name="from_location_id" required>
       {% for loc in locations %}
-      <option value="{{ loc.id }}" {{ 'selected' if values.get('from_location_id') == loc.id|string }}>{{ loc.name }}</option>
+      <option value="{{ loc.id }}" {{ 'selected' if loc.id == from_id }}>{{ loc.name }}</option>
       {% endfor %}
     </select>
 
@@ -38,7 +37,7 @@
       <label for="to_location_id">To</label>
       <select id="to_location_id" name="to_location_id">
         {% for loc in locations %}
-        <option value="{{ loc.id }}" {{ 'selected' if values.get('to_location_id') == loc.id|string }}>{{ loc.name }}</option>
+        <option value="{{ loc.id }}" {{ 'selected' if loc.id == to_id }}>{{ loc.name }}</option>
         {% endfor %}
       </select>
     </div>
@@ -64,11 +63,20 @@
     const toField = document.getElementById("to-field");
     const available = document.getElementById("available");
 
-    function pickDefaultTo() {
-      // Default "To" to the next spot after "From" (freezer → thawing → syringes).
-      if (to.value !== from.value) return;
+    // Until she picks "What happened?" herself, it follows From:
+    // the last stage (in syringes) defaults to Used (fed), the others to Moved.
+    let autoKind = {{ auto_kind | tojson }};
+
+    function setKind(value) {
+      form.querySelector(`input[name="kind"][value="${value}"]`).checked = true;
+    }
+
+    function fromChanged() {
+      // Default "To" to the next stage: freezer → thawing → in syringes.
       const next = from.selectedIndex + 1;
-      if (next < to.options.length) to.selectedIndex = next;
+      const isLast = next >= to.options.length;
+      if (!isLast) to.selectedIndex = next;
+      if (autoKind) setKind(isLast ? "used" : "moved");
     }
 
     function update() {
@@ -76,10 +84,13 @@
       toField.hidden = kind !== "moved";
       const have = (stock[recipe.value] || {})[from.value] || 0;
       available.textContent = recipe.value ? `${have} available there` : "";
-      pickDefaultTo();
     }
 
-    form.addEventListener("change", update);
+    form.addEventListener("change", (e) => {
+      if (e.target.name === "kind") autoKind = false;
+      if (e.target === from) fromChanged();
+      update();
+    });
     update();
   })();
 </script>

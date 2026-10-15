@@ -427,12 +427,25 @@ def register_routes(app):
                 groups.append({"category": c["name"], "items": sorted(items, key=lambda i: i["label"].lower())})
         selected = values.get("meal") or f"{values.get('recipe_id')}:{values.get('category_id')}"
         stock_json = {f"{r}:{c}": {str(l): q for l, q in locs.items()} for (r, c), locs in stock.items()}
+
+        # Default to the next stage: Freezer -> Thawing -> In syringes -> fed (Used).
+        order = [loc["id"] for loc in locations]  # already in stage order
+        from_id = values.get("from_location_id", "")
+        from_id = int(from_id) if from_id.isdigit() and int(from_id) in order else order[0]
+        next_id = dict(zip(order, order[1:])).get(from_id)  # None for the last stage
+        to_id = values.get("to_location_id", "")
+        to_id = int(to_id) if to_id.isdigit() and int(to_id) in order else next_id
+        kind = values.get("kind") or ("moved" if next_id else "used")
         return render_template(
             "move.html",
             groups=groups,
             selected=selected,
             locations=locations,
             values=values,
+            from_id=from_id,
+            to_id=to_id,
+            kind=kind,
+            auto_kind="kind" not in values,
             stock_json=stock_json,
         )
 
