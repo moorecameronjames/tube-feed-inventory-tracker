@@ -2,7 +2,7 @@
 
 All notable changes to Thomas Tube Tracking.
 
-## 1.2 (unreleased)
+## 1.2 (2026-10-15)
 
 ### Changed
 - **Move / Use** defaults to the next stage: from Freezer, To is Fridge (thawing); from
