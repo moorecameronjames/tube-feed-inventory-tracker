@@ -2,6 +2,13 @@
 
 All notable changes to Thomas Tube Tracking.
 
+## 1.3 (unreleased)
+
+### Changed
+- On **Stock**, tapping a number in the **Syringes** column opens **Feeding Time!**
+  (with the 1 / 2 picker) and highlights that meal, instead of Move / Use. Freezer
+  and Thawing numbers still open Move / Use.
+
 ## 1.2 (2026-10-15)
 
 ### Changed

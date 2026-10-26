@@ -319,7 +319,8 @@ def register_routes(app):
                ORDER BY c.sort_order, lower(r.name)""",
             (filled["id"],),
         ).fetchall()
-        return render_template("fed.html", meals=meals, counts=FEED_COUNTS)
+        # Tapping a Syringes number on Stock links here with ?meal=, to highlight it.
+        return render_template("fed.html", meals=meals, counts=FEED_COUNTS, highlight=request.args.get("meal"))
 
     @app.route("/make", methods=["GET", "POST"])
     def make_batch():

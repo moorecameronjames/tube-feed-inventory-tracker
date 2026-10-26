@@ -237,3 +237,4 @@ button.fed-choice:active { background: var(--accent-soft); }
 .recipe-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
 .recipe-stats > div { text-align: center; }
 .recipe-stats .total-fed { border-left: 1px solid var(--border); }
+button.fed-choice.highlight { border: 2px solid var(--highlight); background: var(--highlight-soft); }

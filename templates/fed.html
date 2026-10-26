@@ -14,7 +14,8 @@
   <p class="hint">Then tap what Thomas had.</p>
   <div class="fed-list">
     {% for m in meals %}
-    <button type="submit" name="meal" value="{{ m.recipe_id }}:{{ m.category_id }}" class="fed-choice">
+    {% set key = m.recipe_id ~ ':' ~ m.category_id %}
+    <button type="submit" name="meal" value="{{ key }}" class="fed-choice{{ ' highlight' if key == highlight }}">
       <span class="fed-name">{{ m.recipe }}</span>
       <span class="tag">{{ m.category }}</span>
       <span class="fed-count">{{ m.quantity }} filled</span>

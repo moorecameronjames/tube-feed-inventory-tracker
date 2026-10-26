@@ -594,3 +594,22 @@ def test_move_form_defaults_to_the_next_stage(client, app):
                       f"&to_location_id={locs['Freezer']}&kind=discarded").data.decode()
     assert f'<option value="{locs["Freezer"]}" selected>Freezer' in page.split('id="to_location_id"')[1]
     assert 'name="kind" value="discarded" checked' in page
+
+
+def test_syringes_number_on_stock_goes_to_feeding_time(client, app):
+    soup = add_recipe(client, "Soup")
+    lunch = category_ids(app)["Lunch"]
+    make_batch(client, app, soup, category="Lunch", Freezer=2, Thawing=2, Syringes=3)
+    page = client.get("/").data.decode()
+    locs = location_ids(app)
+
+    # Freezer and Thawing numbers still open Move / Use...
+    assert f"/move?recipe_id={soup}&amp;category_id={lunch}&amp;from_location_id={locs['Freezer']}" in page
+    assert f"/move?recipe_id={soup}&amp;category_id={lunch}&amp;from_location_id={locs['Thawing']}" in page
+    # ...but the Syringes number opens Feeding Time! for that meal.
+    assert f"from_location_id={locs['Syringes']}" not in page
+    assert f'href="/fed?meal={soup}:{lunch}">3</a>' in page
+
+    fed = client.get(f"/fed?meal={soup}:{lunch}").data.decode()
+    assert f'value="{soup}:{lunch}" class="fed-choice highlight"' in fed
+    assert 'name="count" value="1" checked' in fed

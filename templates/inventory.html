@@ -51,7 +51,12 @@
           {% set qty = row.counts.get(loc.id, 0) %}
           <td>
             {% if qty %}
+              {% if loc.short_name == 'Syringes' %}
+              {# Filled syringes get fed, so go straight to Feeding Time! #}
+              <a class="qty" href="{{ url_for('fed_meal', meal=row.recipe.id ~ ':' ~ s.category.id) }}">{{ qty }}</a>
+              {% else %}
               <a class="qty" href="{{ url_for('move', recipe_id=row.recipe.id, category_id=s.category.id, from_location_id=loc.id) }}">{{ qty }}</a>
+              {% endif %}
             {% else %}<span class="zero">0</span>{% endif %}
           </td>
         {% endfor %}
