@@ -2,7 +2,7 @@
 
 All notable changes to Thomas Tube Tracking.
 
-## 1.3 (unreleased)
+## 1.3 (2026-10-26)
 
 ### Added
 - **Changed category** in Move / Use: switch a meal (for example, Chicken & Rice that
