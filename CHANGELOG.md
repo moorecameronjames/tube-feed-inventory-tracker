@@ -4,6 +4,12 @@ All notable changes to Thomas Tube Tracking.
 
 ## 1.3 (unreleased)
 
+### Added
+- **Changed category** in Move / Use: switch a meal (for example, Chicken & Rice that
+  was Lunch) to another category. Every syringe of it moves over (freezer, thawing,
+  and filled), combining with any already in the new category. It's logged in History
+  with Undo, and past batches keep the category they were made under.
+
 ### Changed
 - On **Stock**, tapping a number in the **Syringes** column opens **Feeding Time!**
   (with the 1 / 2 picker) and highlights that meal, instead of Move / Use. Freezer

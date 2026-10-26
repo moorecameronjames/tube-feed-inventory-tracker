@@ -159,6 +159,12 @@ def adjust_stock(db, recipe_id, category_id, location_id, delta):
     )
 
 
+def recategorize(db, recipe_id, from_category_id, to_category_id, location_id, quantity):
+    """Switch syringes to another category, staying in the same location."""
+    adjust_stock(db, recipe_id, from_category_id, location_id, -quantity)
+    adjust_stock(db, recipe_id, to_category_id, location_id, quantity)
+
+
 def apply_movement(db, recipe_id, category_id, from_location_id, to_location_id, quantity):
     if from_location_id:
         adjust_stock(db, recipe_id, category_id, from_location_id, -quantity)
@@ -389,6 +395,10 @@ def register_routes(app):
         if request.method == "POST":
             try:
                 kind = values.get("kind")
+                if kind == "recategorized":
+                    message = change_category(db, categories, values)
+                    flash(message, "success")
+                    return redirect(url_for("inventory"))
                 if kind not in KIND_LABELS:
                     raise ValueError("Pick what happened.")
                 recipe_id, category_id = parse_item(values.get("meal"))
@@ -442,6 +452,7 @@ def register_routes(app):
             groups=groups,
             selected=selected,
             locations=locations,
+            categories=categories,
             values=values,
             from_id=from_id,
             to_id=to_id,
@@ -519,11 +530,12 @@ def register_routes(app):
             recipe = next((r for r in recipes if r["id"] == int(request.args["recipe_id"])), None)
 
         movements = db.execute(
-            """SELECT m.*, r.name AS recipe, c.name AS category, b.made_on,
+            """SELECT m.*, r.name AS recipe, c.name AS category, ct.name AS to_category, b.made_on,
                       lf.short_name AS from_name, lt.short_name AS to_name
                FROM movements m
                JOIN recipes r ON r.id = m.recipe_id
                JOIN categories c ON c.id = m.category_id
+               LEFT JOIN categories ct ON ct.id = m.to_category_id
                LEFT JOIN batches b ON b.id = m.batch_id
                LEFT JOIN locations lf ON lf.id = m.from_location_id
                LEFT JOIN locations lt ON lt.id = m.to_location_id
@@ -566,9 +578,13 @@ def register_routes(app):
                 if m is None:
                     abort(404)
                 # Reverse the change: put the syringes back where they came from.
-                apply_movement(
-                    db, m["recipe_id"], m["category_id"], m["to_location_id"], m["from_location_id"], m["quantity"]
-                )
+                if m["kind"] == "recategorized":
+                    recategorize(db, m["recipe_id"], m["to_category_id"], m["category_id"],
+                                 m["from_location_id"], m["quantity"])
+                else:
+                    apply_movement(
+                        db, m["recipe_id"], m["category_id"], m["to_location_id"], m["from_location_id"], m["quantity"]
+                    )
                 db.execute("DELETE FROM movements WHERE id = %s", (movement_id,))
                 if m["batch_id"]:
                     db.execute(
@@ -583,6 +599,38 @@ def register_routes(app):
         # Stay on the same filtered view.
         recipe_filter = request.form.get("recipe_id", "")
         return redirect(url_for("history", recipe_id=recipe_filter) if recipe_filter.isdigit() else url_for("history"))
+
+
+def change_category(db, categories, values):
+    """Move every syringe of a recipe + category (all locations) to another category.
+    Returns the confirmation message; raises ValueError/StockError on bad input."""
+    recipe_id, category_id = parse_item(values.get("meal"))
+    new_category_id = parse_int(values.get("new_category_id"), "New category", minimum=1)
+    names = {c["id"]: c["name"] for c in categories}
+    if new_category_id not in names or category_id not in names:
+        raise ValueError("Pick breakfast, lunch, snack, or dinner.")
+    if new_category_id == category_id:
+        raise ValueError(f"That's already {names[category_id]}. Pick a different category.")
+    with db.transaction():
+        rows = db.execute(
+            """SELECT location_id, quantity FROM stock
+               WHERE recipe_id = %s AND category_id = %s AND quantity > 0
+               ORDER BY location_id FOR UPDATE""",
+            (recipe_id, category_id),
+        ).fetchall()
+        if not rows:
+            raise ValueError("None of that meal is on hand.")
+        for row in rows:
+            recategorize(db, recipe_id, category_id, new_category_id, row["location_id"], row["quantity"])
+            db.execute(
+                """INSERT INTO movements (recipe_id, category_id, to_category_id, kind,
+                                           from_location_id, to_location_id, quantity)
+                   VALUES (%s, %s, %s, 'recategorized', %s, %s, %s)""",
+                (recipe_id, category_id, new_category_id, row["location_id"], row["location_id"], row["quantity"]),
+            )
+    recipe = db.execute("SELECT name FROM recipes WHERE id = %s", (recipe_id,)).fetchone()["name"]
+    total = sum(row["quantity"] for row in rows)
+    return f"Changed {recipe} from {names[category_id]} to {names[new_category_id]} ({syringes(total)})."
 
 
 def parse_item(value):

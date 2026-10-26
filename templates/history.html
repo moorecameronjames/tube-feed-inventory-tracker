@@ -47,6 +47,8 @@
           <strong>Moved</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span>: {{ m.from_name }} → {{ m.to_name }}
         {% elif m.kind == 'used' %}
           <strong>Used</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> from {{ m.from_name }}
+        {% elif m.kind == 'recategorized' %}
+          <strong>Changed</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> → <span class="tag">{{ m.to_category }}</span> in {{ m.from_name }}
         {% else %}
           <strong>Threw out</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> from {{ m.from_name }}
         {% endif %}

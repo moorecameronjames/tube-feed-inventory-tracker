@@ -613,3 +613,92 @@ def test_syringes_number_on_stock_goes_to_feeding_time(client, app):
     fed = client.get(f"/fed?meal={soup}:{lunch}").data.decode()
     assert f'value="{soup}:{lunch}" class="fed-choice highlight"' in fed
     assert 'name="count" value="1" checked' in fed
+
+
+def change_category(client, app, recipe_id, old, new):
+    cats = category_ids(app)
+    return client.post("/move", data={"kind": "recategorized", "meal": f"{recipe_id}:{cats[old]}",
+                                      "new_category_id": cats[new]}, follow_redirects=True)
+
+
+def test_swap_lunch_and_dinner(client, app):
+    soup = add_recipe(client, "Soup")
+    stew = add_recipe(client, "Stew")
+    make_batch(client, app, soup, category="Lunch", Freezer=3, Thawing=1, Syringes=2)
+    make_batch(client, app, stew, category="Dinner", Freezer=2, Syringes=1)
+
+    resp = change_category(client, app, soup, "Lunch", "Dinner")
+    assert b"Changed Soup from Lunch to Dinner (6 syringes)." in resp.data
+    change_category(client, app, stew, "Dinner", "Lunch")
+
+    # Every location moved over; nothing left behind in the old category.
+    assert stock(app, soup, "Dinner") == {"Freezer": 3, "Thawing": 1, "Syringes": 2}
+    assert stock(app, soup, "Lunch") == {}
+    assert stock(app, stew, "Lunch") == {"Freezer": 2, "Syringes": 1}
+    assert stock(app, stew, "Dinner") == {}
+
+    # The Stock page and the report follow the new categories.
+    page = client.get("/").data.decode()
+    dinner = page[page.index('id="cat-4"'):]
+    assert "Soup" in dinner and "Stew" not in dinner
+    assert "Lunch: 3 (1 fridge, 2 freezer)" in report_text(client)
+
+    history = client.get("/history").data.decode()
+    assert ('Changed</strong> 3 Soup <span class="tag">Lunch</span> → '
+            '<span class="tag">Dinner</span> in Freezer') in history
+
+
+def test_change_category_combines_with_existing(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=2)
+    make_batch(client, app, soup, category="Dinner", Freezer=1, Syringes=1)
+    change_category(client, app, soup, "Lunch", "Dinner")
+    assert stock(app, soup, "Dinner") == {"Freezer": 3, "Syringes": 1}
+
+
+def test_undo_category_change(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=3, Syringes=2)
+    change_category(client, app, soup, "Lunch", "Snack")
+    with psycopg.connect(app.config["DATABASE_URL"]) as conn:
+        changes = conn.execute(
+            "SELECT id FROM movements WHERE kind = 'recategorized' ORDER BY id").fetchall()
+    assert len(changes) == 2  # one per location
+
+    for (mid,) in changes:
+        client.post(f"/history/{mid}/undo")
+    assert stock(app, soup, "Lunch") == {"Freezer": 3, "Syringes": 2}
+    assert stock(app, soup, "Snack") == {}
+
+
+def test_change_category_errors(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=2)
+    assert b"already Lunch" in change_category(client, app, soup, "Lunch", "Lunch").data
+    assert b"None of that meal is on hand." in change_category(client, app, soup, "Dinner", "Lunch").data
+    resp = client.post("/move", data={"kind": "recategorized", "meal": f"{soup}:{category_ids(app)['Lunch']}",
+                                      "new_category_id": "999"}, follow_redirects=True)
+    assert b"Pick breakfast, lunch, snack, or dinner." in resp.data
+    assert stock(app, soup, "Lunch") == {"Freezer": 2}
+
+
+def test_move_form_has_change_category(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=2)
+    page = client.get("/move").data.decode()
+    assert 'value="recategorized"' in page and 'name="new_category_id"' in page
+
+
+def test_pre_1_3_database_gets_category_changes(app, pg_uri):
+    # Shape of the movements table before 1.3: no to_category_id, old kind check.
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute("ALTER TABLE movements DROP COLUMN to_category_id")
+        conn.execute("ALTER TABLE movements DROP CONSTRAINT movements_kind_check")
+        conn.execute("""ALTER TABLE movements ADD CONSTRAINT movements_kind_check
+                        CHECK (kind IN ('made', 'moved', 'used', 'discarded'))""")
+    migrated = create_app({"DATABASE_URL": pg_uri})
+    create_app({"DATABASE_URL": pg_uri})  # running again is a no-op
+    client = migrated.test_client()
+    soup = add_recipe(client, "Soup")
+    make_batch(client, migrated, soup, category="Lunch", Freezer=2)
+    assert b"Changed Soup from Lunch to Dinner" in change_category(client, migrated, soup, "Lunch", "Dinner").data

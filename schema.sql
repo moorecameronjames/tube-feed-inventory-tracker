@@ -63,14 +63,16 @@ CREATE TABLE IF NOT EXISTS stock (
 -- Every change to stock, for history, undo, and the daily report.
 --   made:      to_location only (batch_id set)
 --   moved:     from_location -> to_location
---   used:      from_location only
---   discarded: from_location only
+--   used:          from_location only
+--   discarded:     from_location only
+--   recategorized: category_id -> to_category_id, in place (from = to location)
 CREATE TABLE IF NOT EXISTS movements (
     id                SERIAL PRIMARY KEY,
     recipe_id         INT  NOT NULL REFERENCES recipes(id),
     category_id       INT  NOT NULL REFERENCES categories(id),
+    to_category_id    INT  REFERENCES categories(id),
     batch_id          INT  REFERENCES batches(id),
-    kind              TEXT NOT NULL CHECK (kind IN ('made', 'moved', 'used', 'discarded')),
+    kind              TEXT NOT NULL CHECK (kind IN ('made', 'moved', 'used', 'discarded', 'recategorized')),
     from_location_id  INT  REFERENCES locations(id),
     to_location_id    INT  REFERENCES locations(id),
     quantity          INT  NOT NULL CHECK (quantity > 0),
@@ -100,6 +102,13 @@ BEGIN
         ALTER TABLE stock ADD PRIMARY KEY (recipe_id, category_id, location_id);
     END IF;
 END $$;
+
+-- Migration: changing a meal's category (1.3). Adds to_category_id and the
+-- 'recategorized' kind to databases created before it.
+ALTER TABLE movements ADD COLUMN IF NOT EXISTS to_category_id INT REFERENCES categories(id);
+ALTER TABLE movements DROP CONSTRAINT IF EXISTS movements_kind_check;
+ALTER TABLE movements ADD CONSTRAINT movements_kind_check
+    CHECK (kind IN ('made', 'moved', 'used', 'discarded', 'recategorized'));
 
 CREATE INDEX IF NOT EXISTS movements_created_at_idx ON movements (created_at DESC);
 CREATE INDEX IF NOT EXISTS batches_recipe_idx ON batches (recipe_id, made_on DESC);

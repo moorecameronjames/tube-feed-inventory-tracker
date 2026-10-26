@@ -7,11 +7,12 @@
     <p>Nothing on hand to move yet.</p>
   {% else %}
   <form method="post" id="move-form">
-    <fieldset class="choices">
+    <fieldset class="choices grid-2">
       <legend>What happened?</legend>
       <label><input type="radio" name="kind" value="moved" {{ 'checked' if kind == 'moved' }}> Moved</label>
       <label><input type="radio" name="kind" value="used" {{ 'checked' if kind == 'used' }}> Used</label>
       <label><input type="radio" name="kind" value="discarded" {{ 'checked' if kind == 'discarded' }}> Thrown out</label>
+      <label><input type="radio" name="kind" value="recategorized" {{ 'checked' if kind == 'recategorized' }}> Changed category</label>
     </fieldset>
 
     <label for="meal">Meal</label>
@@ -26,26 +27,38 @@
       {% endfor %}
     </select>
 
-    <label for="from_location_id">From</label>
-    <select id="from_location_id" name="from_location_id" required>
-      {% for loc in locations %}
-      <option value="{{ loc.id }}" {{ 'selected' if loc.id == from_id }}>{{ loc.name }}</option>
-      {% endfor %}
-    </select>
-
-    <div id="to-field">
-      <label for="to_location_id">To</label>
-      <select id="to_location_id" name="to_location_id">
+    <div id="location-fields">
+      <label for="from_location_id">From</label>
+      <select id="from_location_id" name="from_location_id" required>
         {% for loc in locations %}
-        <option value="{{ loc.id }}" {{ 'selected' if loc.id == to_id }}>{{ loc.name }}</option>
+        <option value="{{ loc.id }}" {{ 'selected' if loc.id == from_id }}>{{ loc.name }}</option>
         {% endfor %}
       </select>
+
+      <div id="to-field">
+        <label for="to_location_id">To</label>
+        <select id="to_location_id" name="to_location_id">
+          {% for loc in locations %}
+          <option value="{{ loc.id }}" {{ 'selected' if loc.id == to_id }}>{{ loc.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <label for="quantity">How many syringes?</label>
+      <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1"
+             value="{{ values.get('quantity', 1) }}" required>
+      <p class="small" id="available"></p>
     </div>
 
-    <label for="quantity">How many syringes?</label>
-    <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1"
-           value="{{ values.get('quantity', 1) }}" required>
-    <p class="small" id="available"></p>
+    <div id="category-field">
+      <label for="new_category_id">New category</label>
+      <select id="new_category_id" name="new_category_id">
+        {% for c in categories %}
+        <option value="{{ c.id }}" {{ 'selected' if values.get('new_category_id') == c.id|string }}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="small">Every syringe of this meal switches over: freezer, thawing, and filled.</p>
+    </div>
 
     <button type="submit">Save</button>
   </form>
@@ -60,7 +73,10 @@
     const recipe = form.elements.meal;
     const from = form.elements.from_location_id;
     const to = form.elements.to_location_id;
+    const newCategory = form.elements.new_category_id;
     const toField = document.getElementById("to-field");
+    const locationFields = document.getElementById("location-fields");
+    const categoryField = document.getElementById("category-field");
     const available = document.getElementById("available");
 
     // Until she picks "What happened?" herself, it follows From:
@@ -79,9 +95,21 @@
       if (autoKind) setKind(isLast ? "used" : "moved");
     }
 
+    function pickOtherCategory() {
+      // Default "New category" to something other than the meal's current one.
+      const current = (recipe.value || "").split(":")[1];
+      if (current && newCategory.value === current) {
+        newCategory.selectedIndex = (newCategory.selectedIndex + 1) % newCategory.options.length;
+      }
+    }
+
     function update() {
       const kind = form.querySelector('input[name="kind"]:checked').value;
+      const changingCategory = kind === "recategorized";
+      locationFields.hidden = changingCategory;
+      categoryField.hidden = !changingCategory;
       toField.hidden = kind !== "moved";
+      if (changingCategory) pickOtherCategory();
       const have = (stock[recipe.value] || {})[from.value] || 0;
       available.textContent = recipe.value ? `${have} available there` : "";
     }
