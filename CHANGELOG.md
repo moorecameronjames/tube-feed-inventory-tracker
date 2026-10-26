@@ -15,6 +15,13 @@ All notable changes to Thomas Tube Tracking.
   (with the 1 / 2 picker) and highlights that meal, instead of Move / Use. Freezer
   and Thawing numbers still open Move / Use.
 
+### Fixed
+- **Database usage**: the UptimeRobot keep-alive now checks `/healthz` instead of the
+  Stock page. `/healthz` wakes the web app without touching the database, so Neon can
+  sleep between real uses instead of running around the clock. It had used 80 of its
+  100 free monthly CU-hours. Set in UptimeRobot, not in code:
+  `https://tube-feed-inventory-tracker.onrender.com/healthz`.
+
 ## 1.2 (2026-10-15)
 
 ### Changed
