@@ -165,11 +165,12 @@ def recategorize(db, recipe_id, from_category_id, to_category_id, location_id, q
     adjust_stock(db, recipe_id, to_category_id, location_id, quantity)
 
 
-def apply_movement(db, recipe_id, category_id, from_location_id, to_location_id, quantity):
+def apply_movement(db, recipe_id, category_id, from_location_id, to_location_id, quantity, added=None):
+    """Take quantity from one location and put `added` (default: the same) into the other."""
     if from_location_id:
         adjust_stock(db, recipe_id, category_id, from_location_id, -quantity)
     if to_location_id:
-        adjust_stock(db, recipe_id, category_id, to_location_id, quantity)
+        adjust_stock(db, recipe_id, category_id, to_location_id, quantity if added is None else added)
 
 
 # --- helpers --------------------------------------------------------------
@@ -387,6 +388,7 @@ def register_routes(app):
         db = get_db()
         locations = get_locations(db)
         location_ids = {loc["id"] for loc in locations}
+        by_short_name = {loc["short_name"]: loc["id"] for loc in locations}
         categories = get_categories(db)
         recipes = get_recipes(db, include_archived=True)
         stock = get_stock_map(db)
@@ -411,18 +413,22 @@ def register_routes(app):
                         raise ValueError("Pick two different spots.")
                 if from_id not in location_ids or (to_id and to_id not in location_ids):
                     raise ValueError("Unknown location.")
+                # Thawed food sometimes fills one more syringe than expected.
+                extra = 1 if values.get("extra") else 0
+                if extra and (kind, from_id, to_id) != ("moved", by_short_name["Thawing"], by_short_name["Syringes"]):
+                    raise ValueError("The extra syringe is only for moving from Thawing to Syringes.")
                 with db.transaction():
-                    apply_movement(db, recipe_id, category_id, from_id, to_id, quantity)
+                    apply_movement(db, recipe_id, category_id, from_id, to_id, quantity, quantity + extra)
                     db.execute(
                         """INSERT INTO movements
-                               (recipe_id, category_id, kind, from_location_id, to_location_id, quantity)
-                           VALUES (%s, %s, %s, %s, %s, %s)""",
-                        (recipe_id, category_id, kind, from_id, to_id, quantity),
+                               (recipe_id, category_id, kind, from_location_id, to_location_id, quantity, extra)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                        (recipe_id, category_id, kind, from_id, to_id, quantity, extra),
                     )
             except (ValueError, StockError) as e:
                 flash(str(e), "error")
             else:
-                flash(describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id), "success")
+                flash(describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id, extra), "success")
                 return redirect(url_for("inventory"))
 
         # One choice per recipe + category on hand, grouped by category.
@@ -458,6 +464,8 @@ def register_routes(app):
             to_id=to_id,
             kind=kind,
             auto_kind="kind" not in values,
+            thawing_id=by_short_name["Thawing"],
+            syringes_id=by_short_name["Syringes"],
             stock_json=stock_json,
         )
 
@@ -583,7 +591,8 @@ def register_routes(app):
                                  m["from_location_id"], m["quantity"])
                 else:
                     apply_movement(
-                        db, m["recipe_id"], m["category_id"], m["to_location_id"], m["from_location_id"], m["quantity"]
+                        db, m["recipe_id"], m["category_id"], m["to_location_id"], m["from_location_id"],
+                        m["quantity"] + m["extra"], m["quantity"],
                     )
                 db.execute("DELETE FROM movements WHERE id = %s", (movement_id,))
                 if m["batch_id"]:
@@ -642,7 +651,7 @@ def parse_item(value):
     return recipe_id, category_id
 
 
-def describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id):
+def describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id, extra=0):
     n = db.execute(
         """SELECT r.name AS recipe, c.name AS category, lf.name AS from_name, lt.name AS to_name
            FROM recipes r
@@ -653,6 +662,9 @@ def describe_change(db, kind, quantity, recipe_id, category_id, from_id, to_id):
         (category_id, from_id, to_id, recipe_id),
     ).fetchone()
     what = f"{syringes(quantity)} of {n['recipe']} ({n['category']})"
+    if kind == "moved" and extra:
+        return (f"Moved {what} from {n['from_name']} to {n['to_name']}, "
+                f"plus {extra} extra ({syringes(quantity + extra)} filled).")
     if kind == "moved":
         return f"Moved {what} from {n['from_name']} to {n['to_name']}."
     return f"{KIND_LABELS[kind]}: {what} from {n['from_name']}."

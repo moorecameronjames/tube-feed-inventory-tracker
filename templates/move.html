@@ -48,6 +48,19 @@
       <input id="quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1"
              value="{{ values.get('quantity', 1) }}" required>
       <p class="small" id="available"></p>
+
+      <div id="extra-field" class="switch-row">
+        <div>
+          <div class="switch-label">Made 1 extra syringe</div>
+          <div class="small muted" id="extra-hint"></div>
+        </div>
+        <span class="small muted">0</span>
+        <label class="switch">
+          <input type="checkbox" name="extra" value="1" aria-label="Made 1 extra syringe" {{ 'checked' if values.get('extra') }}>
+          <span></span>
+        </label>
+        <span class="small muted">+1</span>
+      </div>
     </div>
 
     <div id="category-field">
@@ -74,6 +87,12 @@
     const from = form.elements.from_location_id;
     const to = form.elements.to_location_id;
     const newCategory = form.elements.new_category_id;
+    const quantity = form.elements.quantity;
+    const extra = form.elements.extra;
+    const extraField = document.getElementById("extra-field");
+    const extraHint = document.getElementById("extra-hint");
+    const thawingId = String({{ thawing_id | tojson }});
+    const syringesId = String({{ syringes_id | tojson }});
     const toField = document.getElementById("to-field");
     const locationFields = document.getElementById("location-fields");
     const categoryField = document.getElementById("category-field");
@@ -112,6 +131,15 @@
       if (changingCategory) pickOtherCategory();
       const have = (stock[recipe.value] || {})[from.value] || 0;
       available.textContent = recipe.value ? `${have} available there` : "";
+
+      // Thawed food sometimes fills one more syringe than expected.
+      const canAddExtra = kind === "moved" && from.value === thawingId && to.value === syringesId;
+      extraField.hidden = !canAddExtra;
+      if (!canAddExtra) extra.checked = false;
+      const n = parseInt(quantity.value, 10) || 0;
+      extraHint.textContent = extra.checked
+        ? `${n} leave thawing, ${n + 1} go into syringes`
+        : `${n} go into syringes`;
     }
 
     form.addEventListener("change", (e) => {
@@ -119,6 +147,7 @@
       if (e.target === from) fromChanged();
       update();
     });
+    quantity.addEventListener("input", update);
     update();
   })();
 </script>

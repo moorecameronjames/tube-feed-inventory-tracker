@@ -44,7 +44,7 @@
         {% if m.kind == 'made' %}
           <strong>Made</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> → {{ m.to_name }}
         {% elif m.kind == 'moved' %}
-          <strong>Moved</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span>: {{ m.from_name }} → {{ m.to_name }}
+          <strong>Moved</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span>: {{ m.from_name }} → {{ m.to_name }}{% if m.extra %}, <strong>+{{ m.extra }} extra</strong>{% endif %}
         {% elif m.kind == 'used' %}
           <strong>Used</strong> {{ m.quantity }} {{ m.recipe }} <span class="tag">{{ m.category }}</span> from {{ m.from_name }}
         {% elif m.kind == 'recategorized' %}

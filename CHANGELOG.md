@@ -2,6 +2,16 @@
 
 All notable changes to Thomas Tube Tracking.
 
+## 1.4 (unreleased)
+
+### Added
+- **Made 1 extra syringe** switch in Move / Use. Thawed food sometimes fills one more
+  syringe than expected (4 thawing turns out to be 5). When moving from Fridge
+  (thawing) to Fridge (in syringes), flip the switch from 0 to +1: the number you
+  entered comes out of Thawing, and one more goes into Syringes. It starts at 0 every
+  time, only shows for that move, and History marks the entry "+1 extra". Undo takes
+  all of them back out of Syringes and returns the original number to Thawing.
+
 ## 1.3 (2026-10-26)
 
 ### Added

@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS stock (
 
 -- Every change to stock, for history, undo, and the daily report.
 --   made:      to_location only (batch_id set)
---   moved:     from_location -> to_location
+--   moved:     from_location -> to_location (extra: 1 more syringe than expected
+--              came out when thawed food was filled into syringes)
 --   used:          from_location only
 --   discarded:     from_location only
 --   recategorized: category_id -> to_category_id, in place (from = to location)
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS movements (
     from_location_id  INT  REFERENCES locations(id),
     to_location_id    INT  REFERENCES locations(id),
     quantity          INT  NOT NULL CHECK (quantity > 0),
+    extra             INT  NOT NULL DEFAULT 0 CHECK (extra IN (0, 1)),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -109,6 +111,9 @@ ALTER TABLE movements ADD COLUMN IF NOT EXISTS to_category_id INT REFERENCES cat
 ALTER TABLE movements DROP CONSTRAINT IF EXISTS movements_kind_check;
 ALTER TABLE movements ADD CONSTRAINT movements_kind_check
     CHECK (kind IN ('made', 'moved', 'used', 'discarded', 'recategorized'));
+
+-- Migration: the extra syringe from thawing (1.4).
+ALTER TABLE movements ADD COLUMN IF NOT EXISTS extra INT NOT NULL DEFAULT 0 CHECK (extra IN (0, 1));
 
 CREATE INDEX IF NOT EXISTS movements_created_at_idx ON movements (created_at DESC);
 CREATE INDEX IF NOT EXISTS batches_recipe_idx ON batches (recipe_id, made_on DESC);

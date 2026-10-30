@@ -71,12 +71,14 @@ def make_batch(client, app, recipe_id, category="Lunch", made_on="2026-10-12", *
     return client.post("/make", data=data, follow_redirects=True)
 
 
-def move(client, app, recipe_id, kind, quantity, frm, to=None, category="Lunch"):
+def move(client, app, recipe_id, kind, quantity, frm, to=None, category="Lunch", extra=False):
     locs = location_ids(app)
     data = {"kind": kind, "meal": f"{recipe_id}:{category_ids(app)[category]}",
             "quantity": quantity, "from_location_id": locs[frm]}
     if to:
         data["to_location_id"] = locs[to]
+    if extra:
+        data["extra"] = "1"
     return client.post("/move", data=data, follow_redirects=True)
 
 
@@ -702,3 +704,58 @@ def test_pre_1_3_database_gets_category_changes(app, pg_uri):
     soup = add_recipe(client, "Soup")
     make_batch(client, migrated, soup, category="Lunch", Freezer=2)
     assert b"Changed Soup from Lunch to Dinner" in change_category(client, migrated, soup, "Lunch", "Dinner").data
+
+
+def test_extra_syringe_from_thawing(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Thawing=4)
+    resp = move(client, app, soup, "moved", 4, "Thawing", "Syringes", extra=True)
+    assert b"plus 1 extra (5 syringes filled)" in resp.data
+    assert stock(app, soup, "Lunch") == {"Syringes": 5}
+    assert b"+1 extra" in client.get("/history").data
+
+    with psycopg.connect(app.config["DATABASE_URL"]) as conn:
+        (mid,) = conn.execute("SELECT id FROM movements WHERE kind = 'moved'").fetchone()
+    client.post(f"/history/{mid}/undo")
+    assert stock(app, soup, "Lunch") == {"Thawing": 4}
+
+
+def test_extra_syringe_undo_after_feeding(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Thawing=4)
+    move(client, app, soup, "moved", 4, "Thawing", "Syringes", extra=True)
+    move(client, app, soup, "used", 1, "Syringes")
+    with psycopg.connect(app.config["DATABASE_URL"]) as conn:
+        (mid,) = conn.execute("SELECT id FROM movements WHERE kind = 'moved'").fetchone()
+    resp = client.post(f"/history/{mid}/undo", follow_redirects=True)
+    assert b"Can&#39;t undo" in resp.data
+    assert stock(app, soup, "Lunch") == {"Syringes": 4}
+
+
+def test_extra_syringe_only_from_thawing_to_syringes(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Freezer=3, Thawing=2)
+    for args in (("moved", 1, "Freezer", "Thawing"), ("used", 1, "Thawing"), ("discarded", 1, "Thawing")):
+        resp = move(client, app, soup, *args, extra=True)
+        assert b"only for moving from Thawing to Syringes" in resp.data
+    assert stock(app, soup, "Lunch") == {"Freezer": 3, "Thawing": 2}
+
+
+def test_move_form_has_extra_switch(client, app):
+    soup = add_recipe(client, "Soup")
+    make_batch(client, app, soup, category="Lunch", Thawing=2)
+    page = client.get("/move").data.decode()
+    assert 'name="extra"' in page and "Made 1 extra syringe" in page
+    assert not move(client, app, soup, "moved", 2, "Thawing", "Syringes").data.count(b"extra (")
+
+
+def test_pre_1_4_database_gets_extra_syringe(app, pg_uri):
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute("ALTER TABLE movements DROP COLUMN extra")
+    migrated = create_app({"DATABASE_URL": pg_uri})
+    create_app({"DATABASE_URL": pg_uri})  # running again is a no-op
+    client = migrated.test_client()
+    soup = add_recipe(client, "Soup")
+    make_batch(client, migrated, soup, category="Lunch", Thawing=2)
+    move(client, migrated, soup, "moved", 2, "Thawing", "Syringes", extra=True)
+    assert stock(migrated, soup, "Lunch") == {"Syringes": 3}
