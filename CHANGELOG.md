@@ -2,7 +2,7 @@
 
 All notable changes to Thomas Tube Tracking.
 
-## 1.4 (unreleased)
+## 1.4 (2026-10-30)
 
 ### Added
 - **Made 1 extra syringe** switch in Move / Use. Thawed food sometimes fills one more
