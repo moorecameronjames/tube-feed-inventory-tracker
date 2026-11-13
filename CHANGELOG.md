@@ -2,7 +2,7 @@
 
 All notable changes to Thomas Tube Tracking.
 
-## 1.5 (unreleased)
+## 1.5 (2026-11-13)
 
 ### Added
 - **Extra** category, after Dinner, for the smoothies Thomas gets through the day when
