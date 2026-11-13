@@ -102,7 +102,7 @@ main { max-width: 720px; margin: 0 auto; padding: 16px; }
 .flash-success { background: var(--success-bg); color: var(--success-text); }
 
 .summary {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 16px;
 }
 .stat {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;

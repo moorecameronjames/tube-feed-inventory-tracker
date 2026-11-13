@@ -26,7 +26,8 @@ INSERT INTO categories (name, sort_order) VALUES
     ('Breakfast', 1),
     ('Lunch',     2),
     ('Snack',     3),
-    ('Dinner',    4)
+    ('Dinner',    4),
+    ('Extra',     5)   -- smoothies through the day, one at a time (1.5)
 ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS recipes (

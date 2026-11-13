@@ -53,7 +53,7 @@ every change is logged in `movements`, and `batches` records each time a recipe 
 Each morning the app pushes a summary to the [ntfy](https://ntfy.sh) phone app:
 anything short of two days' worth (fewer than 4 syringes) gets flagged: MAKE MORE
 (fewer than 4 in a category; urgent at 0) and THAW (fewer than 4 in the fridge with
-some in the freezer). MAKE/THAW lines come first so they fit on the lock screen; the
+some in the freezer). Extra (smoothies, given one at a time) uses 2 instead of 4. MAKE/THAW lines come first so they fit on the lock screen; the
 morning report then ends with how many syringes are still thawing (to repackage). The
 same to-dos show on the Stock page (minus the thawing line, which is morning-only), and
 `/report.txt` has the plain-text version of the morning report.

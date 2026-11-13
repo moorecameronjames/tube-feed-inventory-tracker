@@ -1,7 +1,8 @@
 """The morning report: stock per category and what needs doing today.
 
 Counts are syringes of food. The report only runs in the morning, so anything
-short of two days' worth (fewer than LOW syringes) needs action today:
+short of two days' worth (fewer than LOW syringes; LOW_BY_CATEGORY for categories
+fed at a different pace) needs action today:
   - MAKE MORE when a category has fewer than LOW syringes in total; at 0 it's urgent.
   - THAW when a category has fewer than LOW syringes in the fridge (thawing + filled)
     and there are some in the freezer.
@@ -12,6 +13,8 @@ how many syringes are still thawing, so they get repackaged into syringes.
 FREEZER = "Freezer"
 THAWING = "Fridge (thawing)"
 LOW = 4  # two days' worth of syringes
+# Extra (smoothies) is given one at a time, so two days' worth is 2.
+LOW_BY_CATEGORY = {"Extra": 2}
 
 
 def build_report(db, today):
@@ -47,11 +50,12 @@ def build_report(db, today):
     urgent, make, thaw = [], [], []
     for cat in categories.values():
         name = cat["name"]
+        low = LOW_BY_CATEGORY.get(name, LOW)
         if cat["total"] == 0:
             urgent.append(f"MAKE {name}: none left!")
-        elif cat["total"] < LOW:
+        elif cat["total"] < low:
             make.append(f"MAKE {name}: {cat['total']} syringe{'' if cat['total'] == 1 else 's'} left")
-        if cat["fridge"] < LOW and cat["freezer"] > 0:
+        if cat["fridge"] < low and cat["freezer"] > 0:
             # Suggest the recipe with the most in the freezer.
             recipe = max(cat["freezer_by_recipe"].items(), key=lambda kv: (kv[1], kv[0]))[0]
             thaw.append(f"THAW {name}: {recipe}")

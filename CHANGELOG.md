@@ -2,6 +2,16 @@
 
 All notable changes to Thomas Tube Tracking.
 
+## 1.5 (unreleased)
+
+### Added
+- **Extra** category, after Dinner, for the smoothies Thomas gets through the day when
+  he's hungry. It works like the other four everywhere: Stock, Feeding Time!, Made a
+  batch, Move / Use, and History.
+- Because smoothies go one at a time, the morning report uses **2** for Extra instead
+  of 4: MAKE when there's 1 left (urgent at 0), and THAW when the fridge has fewer
+  than 2 and the freezer has some. The other categories are unchanged.
+
 ## 1.4 (2026-10-30)
 
 ### Added

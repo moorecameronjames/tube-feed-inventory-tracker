@@ -106,7 +106,7 @@ def test_make_batch_needs_some_meals(client, app):
 def test_make_batch_needs_a_category(client, app):
     rid = add_recipe(client)
     resp = make_batch(client, app, rid, category=None, Freezer=2)
-    assert b"Pick breakfast, lunch, snack, or dinner" in resp.data
+    assert b"Pick a category" in resp.data
     assert stock(app, rid) == {}
 
 
@@ -163,7 +163,7 @@ def test_inventory_grouped_by_category(client, app):
     page = client.get("/").data.decode()
 
     cards = re.findall(r'stat-number">(\d+)</div>\s*<div class="stat-label">(\w+)', page)
-    assert {name: int(n) for n, name in cards} == {"Breakfast": 1, "Lunch": 0, "Snack": 0, "Dinner": 5}
+    assert {name: int(n) for n, name in cards} == {"Breakfast": 1, "Lunch": 0, "Snack": 0, "Dinner": 5, "Extra": 0}
     assert "6 syringes in all" in page
 
     dinner = page[page.index('id="cat-4"'):]
@@ -318,7 +318,7 @@ def report_text(client):
 
 def test_report_when_empty(client):
     text = report_text(client)
-    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner", "Extra"):
         assert f"{cat}: 0\n" in text
         assert f"MAKE {cat}: none left!" in text
     assert "THAW" not in text
@@ -346,6 +346,7 @@ def test_report_rules(client, app):
     # MAKE/THAW first, then the thawing line last (Lunch has 2 thawing).
     assert text.split("\n\n")[-1].splitlines() == [
         "🚨 MAKE Dinner: none left!",
+        "🚨 MAKE Extra: none left!",
         "⚠️ MAKE Breakfast: 1 syringe left",
         "🧊 THAW Breakfast: Oats",
         "🧊 THAW Snack: Stew",
@@ -365,6 +366,7 @@ def test_report_flags_less_than_two_days(client, app):
     make_batch(client, app, soup, category="Lunch", Syringes=3)               # 3: make more
     make_batch(client, app, soup, category="Snack", Syringes=3)               # 3: make more
     make_batch(client, app, soup, category="Dinner", Syringes=3, Freezer=5)   # fridge 3: thaw
+    make_batch(client, app, soup, category="Extra", Syringes=2)               # Extra: 2 is fine
 
     actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠🧊"]
     assert actions == [
@@ -376,7 +378,7 @@ def test_report_flags_less_than_two_days(client, app):
 
 def test_report_nothing_to_do(client, app):
     rid = add_recipe(client, "Soup")
-    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner", "Extra"):
         make_batch(client, app, rid, category=cat, Syringes=4, Freezer=2)
     assert "✅ Nothing to do today." in report_text(client)
     assert b"Nothing to do today." in client.get("/").data
@@ -390,6 +392,7 @@ def ntfy(app):
 ALL_OUT = [
     "🚨 MAKE Breakfast: none left!", "🚨 MAKE Lunch: none left!",
     "🚨 MAKE Snack: none left!", "🚨 MAKE Dinner: none left!",
+    "🚨 MAKE Extra: none left!",
 ]
 
 
@@ -420,7 +423,7 @@ def test_report_not_due_without_topic(client, app):
 
 def test_quiet_priority_when_nothing_to_do(client, app, ntfy):
     rid = add_recipe(client, "Soup")
-    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner", "Extra"):
         make_batch(client, app, rid, category=cat, Syringes=4)
     app.config["REPORT_HOUR"] = 0
     payload = client.post("/report/due").json["payload"]
@@ -545,7 +548,7 @@ def test_thawing_line_in_the_morning_only(client, app, ntfy):
     soup = add_recipe(client, "Soup")
     stew = add_recipe(client, "Stew")
     # Plenty everywhere (nothing to make or thaw), but some left thawing.
-    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner", "Extra"):
         make_batch(client, app, soup, category=cat, Syringes=4, Freezer=2)
     make_batch(client, app, soup, category="Snack", Thawing=1)
     make_batch(client, app, stew, category="Dinner", Thawing=2)
@@ -680,7 +683,7 @@ def test_change_category_errors(client, app):
     assert b"None of that meal is on hand." in change_category(client, app, soup, "Dinner", "Lunch").data
     resp = client.post("/move", data={"kind": "recategorized", "meal": f"{soup}:{category_ids(app)['Lunch']}",
                                       "new_category_id": "999"}, follow_redirects=True)
-    assert b"Pick breakfast, lunch, snack, or dinner." in resp.data
+    assert b"Pick a category." in resp.data
     assert stock(app, soup, "Lunch") == {"Freezer": 2}
 
 
@@ -759,3 +762,29 @@ def test_pre_1_4_database_gets_extra_syringe(app, pg_uri):
     make_batch(client, migrated, soup, category="Lunch", Thawing=2)
     move(client, migrated, soup, "moved", 2, "Thawing", "Syringes", extra=True)
     assert stock(migrated, soup, "Lunch") == {"Syringes": 3}
+
+
+def test_extra_category_flags_below_two(client, app):
+    """Extra (smoothies) is given one at a time: fewer than 2 is low, not fewer than 4."""
+    soup = add_recipe(client, "Soup")
+    smoothie = add_recipe(client, "Berry Smoothie")
+    for cat in ("Breakfast", "Lunch", "Snack", "Dinner"):
+        make_batch(client, app, soup, category=cat, Syringes=4)
+    make_batch(client, app, smoothie, category="Extra", Syringes=1, Freezer=2)
+
+    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠🧊"]
+    assert actions == ["🧊 THAW Extra: Berry Smoothie"]  # 3 total is fine; 1 in the fridge isn't
+
+    client.post("/fed", data={"count": "1", "meal": f"{smoothie}:{category_ids(app)['Extra']}"})
+    move(client, app, smoothie, "used", 1, "Freezer", category="Extra")
+    actions = [line for line in report_text(client).splitlines() if line and line[0] in "🚨⚠🧊"]
+    assert actions == ["⚠️ MAKE Extra: 1 syringe left", "🧊 THAW Extra: Berry Smoothie"]
+
+
+def test_extra_category_is_last(client, app):
+    with psycopg.connect(app.config["DATABASE_URL"]) as conn:
+        names = [n for (n,) in conn.execute("SELECT name FROM categories ORDER BY sort_order")]
+    assert names == ["Breakfast", "Lunch", "Snack", "Dinner", "Extra"]
+    add_recipe(client, "Berry Smoothie")
+    page = client.get("/make").data.decode()
+    assert page.index("Dinner") < page.index("Extra")

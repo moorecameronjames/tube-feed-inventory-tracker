@@ -342,7 +342,7 @@ def register_routes(app):
                 recipe_id = parse_int(form.get("recipe_id"), "Recipe", minimum=1)
                 category_id = parse_int(form.get("category_id"), "Category")
                 if category_id not in {c["id"] for c in categories}:
-                    raise ValueError("Pick breakfast, lunch, snack, or dinner.")
+                    raise ValueError("Pick a category.")
                 made_on = parse_date(form.get("made_on"))
                 split = {
                     loc["id"]: parse_int(form.get(f"qty_{loc['id']}"), loc["name"])
@@ -617,7 +617,7 @@ def change_category(db, categories, values):
     new_category_id = parse_int(values.get("new_category_id"), "New category", minimum=1)
     names = {c["id"]: c["name"] for c in categories}
     if new_category_id not in names or category_id not in names:
-        raise ValueError("Pick breakfast, lunch, snack, or dinner.")
+        raise ValueError("Pick a category.")
     if new_category_id == category_id:
         raise ValueError(f"That's already {names[category_id]}. Pick a different category.")
     with db.transaction():
